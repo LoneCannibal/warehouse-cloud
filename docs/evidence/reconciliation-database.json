@@ -1,0 +1,15 @@
+{
+ "orders_accepted": 16906,
+ "orders_dispatched": 11515,
+ "tasks_by_status": {
+  "ASSIGNED": 3,
+  "PENDING": 6409,
+  "DONE": 40891
+ },
+ "max_attempt": 2,
+ "tasks_retried": 14,
+ "outbox_unsent": 3,
+ "pick_tasks_done": 29381,
+ "picks_confirmed_in_inventory": 29383,
+ "units_still_reserved": 4436
+}

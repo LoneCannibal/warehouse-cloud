@@ -1,17 +1,24 @@
-# Evidence to capture on Google Cloud
+# Evidence from Google Cloud
 
-Save these here during the first full deployment, then add them to section 15 of the design document.
+Captured during the live test on 5 November 2026. `docs/verification.md` summarises each file.
 
-- [ ] `terraform plan` reporting no changes
+| File | Shows |
+|---|---|
+| `smoke-public-url.txt` | An order through the public load balancer reaching DISPATCHED |
+| `k6-summary.json` | The k6 load test: 16,905 orders at 35 a second |
+| `hpa-during-load.txt` | Both HPAs every 20 seconds during the load test |
+| `chaos-under-load.txt` | The four ZooKeeper failure drills, injected under load |
+| `reconciliation-database.json`, `reconciliation-cloud.json` | Orders, tasks, stock, Firestore, Cloud Storage and Flink totals agreeing |
+| `gitops-rollout.txt` | A pushed commit rolled out by Argo CD |
+| `gitops-self-heal.txt` | A manual change reverted by Argo CD |
+| `observability.txt` | Prometheus targets, live metrics, Grafana data sources and dashboards |
+| `central-logging-one-order.txt` | One order followed across services in Cloud Logging, with Flink's logs |
+
+Still worth capturing at the demo, as screenshots, since these are visual:
+
 - [ ] Argo CD showing all Applications Synced and Healthy
-- [ ] A commit rolling out through Argo CD, and a manual change being reverted
-- [ ] `kubectl get hpa` during the load test, showing replicas above the minimum
-- [ ] Grafana Service RED during the load test
-- [ ] Grafana Cluster Health
+- [ ] Grafana Service RED and Warehouse KPIs during the load test
 - [ ] Grafana ZooKeeper during a failover
-- [ ] Grafana Warehouse KPIs showing recovery after a killed picker
-- [ ] Flink dashboard with the job running
-- [ ] A record from `warehouse.analytics.results`
-- [ ] Grafana Central Logs, or the Logs Explorer, following one `order_id`, including Flink and the Dispatch function
+- [ ] Grafana Central Logs following one `order_id`
+- [ ] The Flink dashboard with the job running
 - [ ] The budget and the Billing overview, showing spending inside the credit
-- [ ] The k6 end-of-test summary

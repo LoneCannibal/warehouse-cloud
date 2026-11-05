@@ -1,0 +1,39 @@
+18:35:24 load started: k6 ramps to 40 orders/s over 1 minute, holds 6 minutes
+18:37:54 status before failures
+Scheduler leader: job-scheduler-f76ccd5fb-scd58
+zookeeper-0: follower
+zookeeper-1: follower
+zookeeper-2: 
+NAME           REFERENCE                 TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+order-intake   Deployment/order-intake   cpu: 51%/60%   2         6         4          152m
+picking        Deployment/picking        cpu: 56%/60%   2         6         6          152m
+18:38:15 kill the scheduler leader
+Killing job-scheduler-f76ccd5fb-scd58
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "job-scheduler-f76ccd5fb-scd58" force deleted from warehouse namespace
+18:39:13 status after leader kill
+Scheduler leader: job-scheduler-f76ccd5fb-mbs2z
+18:39:26 kill a picker mid-task
+Killing picking-589698f6b5-2nqkj
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "picking-589698f6b5-2nqkj" force deleted from warehouse namespace
+18:40:15 hang a picker
+Hanging picking-589698f6b5-5qx2x
+{"worker_id":"picking-589698f6b5-5qx2x","hung":true}
+18:40:50 resume it, so its late results get fenced
+Resuming picking-589698f6b5-5qx2x
+{"worker_id":"picking-589698f6b5-5qx2x","hung":false}
+18:41:14 kill the ZooKeeper leader
+Killing zookeeper-2
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "zookeeper-2" force deleted from warehouse namespace
+18:42:05 status after ZooKeeper kill
+Scheduler leader: job-scheduler-f76ccd5fb-mbs2z
+zookeeper-0: follower
+zookeeper-1: leader
+zookeeper-2: follower
+NAME           REFERENCE                 TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+order-intake   Deployment/order-intake   cpu: 52%/60%   2         6         4          156m
+picking        Deployment/picking        cpu: 39%/60%   2         6         2          156m
+k6 exit 0
+18:43:25 load finished

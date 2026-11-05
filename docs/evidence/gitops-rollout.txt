@@ -1,0 +1,11 @@
+18:49:36 pushed commit 4246d85: picking and packing get WORKER_SLOTS=4
+18:53:48 Argo CD applied it: warehouse-services at revision 4246d85, status Synced
+deployment "picking" successfully rolled out
+deployment "packing" successfully rolled out
+18:54:07 rollout complete
+    packing-5c648c4964-w9vv8 Terminating 168m
+    packing-d4bc7d5cc-7rxfq Running 22s
+    packing-d4bc7d5cc-r68f5 Running 28s
+    picking-f6d8cb7b8-pmgm4 Running 28s
+    picking-f6d8cb7b8-rmffm Running 21s
+    picking-f6d8cb7b8-rr4ts Running 13s

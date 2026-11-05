@@ -1,0 +1,21 @@
+{
+ "firestore_shipments": 11515,
+ "firestore_live_workers": 8,
+ "flink_windows_in_firestore": 128,
+ "flink_zones": [
+  "A",
+  "B",
+  "C",
+  "D",
+  "P"
+ ],
+ "flink_totals": {
+  "picks_completed": 28133,
+  "packs_completed": 11515,
+  "dispatched": 11515,
+  "tasks_abandoned": 14,
+  "tasks_reclaimed": 14
+ },
+ "gcs_manifests": 11515,
+ "gcs_labels": 11515
+}

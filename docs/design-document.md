@@ -288,42 +288,29 @@ Teammates have no billing role, so only the billing administrator can change how
 
 ## 15. Validation
 
-**Deployment status: validated locally. Not yet deployed to Google Cloud.** Update this section with the Google Cloud results after deployment.
+**Deployment status: deployed to Google Cloud and tested live on 5 November 2026, then torn down until the demo.** Full figures, evidence files and the remaining gaps are in `docs/verification.md`.
 
-Full figures and limits are in `docs/verification.md`. Testing ran in two rounds.
+The live test ran every requirement on the real services:
 
-**Failure testing of the coordination core.** This ran before the move to Google Cloud, with real ZooKeeper, Kafka, PostgreSQL and Flink. The scheduling, ZooKeeper, fencing and outbox code did not change in the move; only the storage clients, the serverless entry point and Kafka sign-in did. k6 offered 25 orders per second for 75 seconds while four failures were injected: the scheduler leader was killed, a picker was killed, a picker was hung and then resumed, and the ZooKeeper leader node was killed.
-
-| Check | Result |
+| Requirement | Live result |
 |---|---|
-| Orders accepted and dispatched | 2,145 of 2,145, with no duplicate shipments |
-| Stock | 8,078 units ordered, 8,078 removed, none left reserved |
-| Failed requests | 0, with a p95 of 8 ms |
-| Scheduler failover | 10.8 s, which was also the longest pause in order flow |
-| Abandoned tasks | 8 abandoned, 8 reclaimed, all completed |
-| Late results from the hung worker | 2 of 2 rejected by the attempt number |
-| Flink compared with Kafka and PostgreSQL | All 8 closed windows match exactly, with 0 late events dropped |
+| a. Infrastructure as Code | Terraform created the long-lived stack and 93 hourly resources, and removed the hourly ones again |
+| b. Serverless and communication | An order passed REST, gRPC and Kafka, then Cloud Storage, Pub/Sub push and the Cloud Run function, reaching DISPATCHED through the public load balancer |
+| c. Kubernetes, HPA and load | k6 offered 16,905 orders at 35 a second with a failure rate of 0.0001; Picking scaled from 2 to 6 pods and Order Intake from 2 to 4 |
+| d. GitOps | A pushed commit was rolled out by Argo CD within about 4 minutes, and a manual change was reverted within 12 seconds |
+| e. Flink | The job ran on Dataproc, checkpointed to Cloud Storage, and its windows reached Firestore and Prometheus through the results topic |
+| f. ZooKeeper | Under load, a killed scheduler leader, a killed picker, a hung picker and a killed ZooKeeper leader were all recovered, and the hung picker's late results were fenced |
+| g. Storage | Shipments in Firestore, manifests and labels in Cloud Storage and orders in Cloud SQL all agreed, at 11,515 dispatched orders mid-drain |
+| h. Observability | 42 Prometheus targets up, five Grafana dashboards, and one order followed across GKE and Cloud Run in Cloud Logging, with Flink's logs alongside |
 
-**The Google Cloud version, on Google's emulators.** Cloud Storage ran on fake-gcs-server, which publishes upload notifications to Pub/Sub as Cloud Storage does. Pub/Sub and Firestore ran on Google's own emulators, and Flink on 1.17.2, the version Dataproc runs, on Java 11. k6 offered 15 orders per second for 60 seconds.
+The live run found eight problems that local testing could not, all now fixed. The two most serious: the Kafka address came without a port, which Flink's client rejects, and under a deep backlog the scheduler starved the packers by always handing out the oldest pick tasks first. `docs/verification.md` lists all eight.
 
-| Check | Result |
-|---|---|
-| Orders accepted and dispatched | 1,070 of 1,070 |
-| Firestore shipments | 1,070, one per order |
-| Cloud Storage manifests and labels | 1,070 of each |
-| Tasks | 3,065 of 3,065 done, picks confirmed once each, no stock left reserved |
-| Failed requests | 0, with a p95 of 6 ms |
-| Flink windows read back from Firestore | All 7 closed windows match Kafka exactly |
-| Errors in any service log | 0 |
-
-Automated tests pass on the final code: 115 Python tests, of which 15 use a real ZooKeeper ensemble and PostgreSQL; 9 Flink tests on Java 11; and 12 Terraform tests against mocked providers. Both Terraform stacks also validate against the real Google provider's schema, which caught one attribute missing from the older provider before any apply.
+Before this, the system was tested locally on real ZooKeeper, Kafka, PostgreSQL and Flink, with Google's emulators for Cloud Storage, Pub/Sub and Firestore. There, 2,145 of 2,145 orders were dispatched while four failures were injected, with a scheduler failover of 10.8 seconds. Automated tests cover the rest: 118 Python tests, 16 of them on a real ZooKeeper ensemble and PostgreSQL; 9 Flink tests; and 13 Terraform tests that pin the settings that decide the bill.
 
 ### Limitations
 
-- Nothing has run on Google Cloud yet. Kafka sign-in with Google credentials, the Pig job that starts Flink, Pub/Sub push to the function and Workload Identity are untested against the real services.
-- Flink and ZooKeeper ran as local processes rather than on Dataproc and GKE.
-- All local tests ran on one machine, so the figures show correct behaviour under failure rather than production capacity.
-- The HPA itself needs a cluster, so scale-out has not yet been observed. The CPU load that drives it has been measured.
+- The stack runs only for sessions: it is created with `make up` and destroyed with `make down`, so the credit lasts.
+- Offering 35 orders a second is more than this stack completes; a backlog builds and drains afterwards. The HPA scales on CPU, as the brief asks, while the workers are partly limited by network round trips.
 - GKE, Dataproc and Cloud SQL each sit in a single zone to keep costs down, at the price of availability.
 - If the Flink job restarts without a checkpoint, queue depth starts again from zero. The Prometheus gauge from the Job Scheduler remains accurate.
 

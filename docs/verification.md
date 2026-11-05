@@ -1,10 +1,57 @@
 # Verification
 
-**Status: validated locally. Not yet deployed to Google Cloud.**
+**Status: deployed to Google Cloud and tested live on 5 November 2026, then torn down.** `make up` brings it back in about 45 minutes.
 
-The application logic, coordination and stream processing ran on real software, and the Google Cloud services ran on Google's own emulators or close stand-ins. Nothing here has touched a Google Cloud project, so no result below proves how GKE, Dataproc, Managed Kafka, Cloud SQL or Cloud Run behave. Section 8 lists what is still unproven and what to check first.
+The first part of this document covers the live deployment. The rest covers the local testing that came before it, on real software and Google's emulators, which still holds for the logic the cloud cannot easily show, such as a scheduler failover under controlled timing.
 
-Testing ran in two rounds. The first, before the move from AWS to Google Cloud, failure-tested the coordination core. The second tested the Google Cloud version. The scheduling, ZooKeeper, fencing and outbox code did not change between them; the storage clients, the serverless entry point and Kafka sign-in did.
+## Live on Google Cloud
+
+Project `g18-warehouse-3c6b` in `asia-south1`, on the group's credit. Evidence files are in `docs/evidence/`.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Bootstrap | 46 resources: state bucket, registry, Firestore, CI identity, budget, kill switch | |
+| Kill switch | Its self-test reported `can_unlink_billing: True`: it holds the permission to turn billing off | |
+| CI | Tests pass on GitHub's runners. The image build signed in through Workload Identity Federation, pushed 7 images to Artifact Registry and committed their tags | |
+| `make up` | 93 resources. Managed Kafka took 27 minutes; GKE, Dataproc and Cloud SQL about 6 minutes each | |
+| Kafka topics | Created with replication factor 3 at the minimum cluster size | |
+| Argo CD | All 5 Applications Synced and Healthy; it read the private repository with a read-only deploy key | |
+| Pods | All 18 in `warehouse` Ready with no restarts: Cloud SQL over its private address, ZooKeeper quorum, Kafka sign-in through Workload Identity | |
+| Public URL | An order through the load balancer reached DISPATCHED. `/chaos` and `/` are not exposed | `smoke-public-url.txt` |
+| Load test | 16,905 orders at 35 a second from India over the internet: failure rate 0.0001, p95 531 ms | `k6-summary.json` |
+| HPA | Picking scaled from 2 to 6 pods and Order Intake from 2 to 4 within two minutes, then back down | `hpa-during-load.txt` |
+| Failures under load | Scheduler leader killed: a standby took over. Picker killed: its tasks were reclaimed. Picker hung and resumed: its late results were fenced. ZooKeeper leader killed: a new leader took over and the node rejoined | `chaos-under-load.txt` |
+| Consistency | Mid-drain, dispatched orders, Firestore shipments, Cloud Storage manifests and labels, and Flink's pack and dispatch counts were all exactly 11,515. Abandoned and reclaimed: 14 and 14 everywhere. Every pick confirmed exactly once | `reconciliation-*.json` |
+| GitOps rollout | A pushed commit was synced by Argo CD 4 minutes 12 seconds later and rolled out 19 seconds after that | `gitops-rollout.txt` |
+| Self-heal | A manual scale to 5 replicas was reverted to Git's 2 within 12 seconds | `gitops-self-heal.txt` |
+| Flink on Dataproc | Started and replaced through the Pig job; checkpoints to Cloud Storage every 30 seconds; 128 windows reached Firestore through the results topic | |
+| Metrics | 42 Prometheus targets up; Grafana has its Prometheus, Cloud Monitoring and Cloud Logging data sources and all five dashboards | `observability.txt` |
+| Central logging | One order followed in Cloud Logging across Order Intake, the Job Scheduler and the Dispatch function; Flink's logs in the same place | `central-logging-one-order.txt` |
+| Teardown | `make down` removed the load balancer and disks first, then all 93 resources | |
+
+### Bugs the live deployment found
+
+All are fixed and committed. None could show up locally or against mocks.
+
+| Bug | How it showed up | Fix |
+|---|---|---|
+| The Kafka address had no port | The provider returns the host alone. Python's client assumes port 9092, but Flink's Java client refused it and restarted in a loop | Terraform adds `:9092` everywhere it passes the address |
+| Flink's TaskManager never started | Dataproc's YARN counts vcores; one node offers 2, and the JobManager plus a 2-slot TaskManager asked for 3 | The TaskManager asks for 1 vcore |
+| Packers starved under a deep backlog | Each assignment pass took the 100 oldest tasks of any type; a PICK backlog filled every pass while 5,036 PACK tasks waited | The pass takes the oldest tasks of each type, with a regression test that fails on the old code |
+| Workers too slow for the HPA to notice | In the cloud each task waits on several round trips; two slots per pod left a backlog while CPU stayed under target | Four slots per picker and packer, rolled out through Git as the GitOps test |
+| The Central Logs dashboard was empty | Grafana's Cloud Logging plugin fills in the project only for a query in its `query` field | The dashboard sets both fields, and still holds no project id |
+| A plan wanted to rebuild Dataproc | Google adds three default scopes to the cluster's service account | The configuration lists them, as Google stores them |
+| A plan wanted to change GKE | The temporary default pool's settings read back as the worker pool's | Terraform ignores them after creation |
+| `make up` stopped on a rate limit | Creating 11 service accounts at once exceeded Google's per-minute limit | The accounts are created once in `infra/bootstrap`; `make up` only looks them up |
+
+Two lessons that are not bugs: a dropped network connection interrupted the first `make up`, because Terraform does not retry a failed DNS lookup, so run it on a stable network; and offering 35 orders a second is more than this stack completes, so a backlog builds and drains after the load stops.
+
+### Still unproven
+
+- A clean `make bootstrap` and `make up` from nothing with the final code. The service accounts moved into `infra/bootstrap` after this run, and the run itself needed Kafka imported by hand after the network dropped and Flink restarted by hand twice for the fixes above.
+- The packing fix, live. It passes its integration test against real ZooKeeper and PostgreSQL.
+- The Central Logs dashboard in a browser. Its query returns logs through Grafana's API in the form the browser sends.
+- The billing account still asks to be verified. Until it is, Google may suspend it.
 
 ## 1. What ran, and as what
 
@@ -30,10 +77,10 @@ All of these pass on the final code.
 |---|---|---|
 | Shared library | 13 passed | Real gRPC servers; fake Google credentials for the Kafka token |
 | Picking, Packing, Analytics API, Dispatch function | 6, 4, 4 and 10 passed | In-memory Firestore and Cloud Storage |
-| Ops scripts, manifests and kill switch (`tests/scripts`) | 63 passed | Recording stubs and parsed YAML |
-| Coordination (`tests/integration`) | 15 passed | Real three-node ZooKeeper and PostgreSQL |
+| Ops scripts, manifests and kill switch (`tests/scripts`) | 65 passed | Recording stubs and parsed YAML |
+| Coordination (`tests/integration`) | 16 passed | Real three-node ZooKeeper and PostgreSQL |
 | Flink job | 9 passed | Flink 1.17 MiniCluster on Java 11 |
-| Terraform | 6 and 6 passed, for bootstrap and runtime | Mocked providers |
+| Terraform | 7 and 6 passed, for bootstrap and runtime | Mocked providers |
 | Terraform validation | Both stacks valid, `fmt` clean | The real Google provider 8.10.0 schema |
 | Kubernetes manifests | 31 valid, 0 invalid, 6 skipped | Kubernetes 1.36 schemas |
 | Monitoring chart | kube-prometheus-stack 92.17.0 renders 101 objects with our values | Helm |
@@ -41,6 +88,7 @@ All of these pass on the final code.
 
 - **Skipped manifests.** The 4 Argo CD Applications and 2 ServiceMonitors are custom resources with no schema available, so they were parsed but not checked against a schema.
 - **What the Terraform tests pin.** The vCPU total stays within the cap of 8 and a larger plan is refused; GKE upgrades add no surge node; Cloud SQL is the Enterprise edition and zonal; Managed Prometheus is off; Managed Kafka is at its minimum size; Dataproc deletes itself; the budget counts cost before credits, across the whole billing account, from a fixed start date; the kill switch listens to the budget's topic and holds Project Billing Manager; teammates get no billing role; only this repository can use the CI identity.
+- **One flaky run.** Once, the coordination suite did not exit after its tests; a rerun passed all 16 in 9 seconds. A ZooKeeper client thread left running at exit is the likely cause.
 - **Services without unit tests.** Inventory, Order Intake, Job Scheduler and Worker Registry have no unit tests of their own. Job Scheduler and the worker code are covered by the coordination suite. All four are covered by the end-to-end checks in sections 3 and 4, which reconcile every order, task and unit of stock.
 
 ## 3. The Google Cloud version, on the emulators
@@ -128,31 +176,6 @@ In the first round, all 34 Prometheus queries parsed against a real Prometheus w
 | `down.sh` could abort partway through teardown | `pipefail` on an empty result | Teardown continues |
 | Error-rate panel showed No data | A healthy service has no error series | `or 0 *` in the query |
 
-## 8. Not verified
+## 8. Not verified locally
 
-| Area | State | What to do first on Google Cloud |
-|---|---|---|
-| Any real Google Cloud API | Nothing has been applied | `make bootstrap`, then `make up` |
-| The vCPU quota | Read from the project: 32 across it, 100 in `asia-south1`, 200 for N2 there, and 0 for E2 there, which is why the stack uses N2 | `make preflight` repeats the check before every `make up` |
-| Managed Kafka in this project | Never created | Apply once. The fallback is Kafka on GKE, which takes vCPUs from the same cap |
-| Replication factor 3 at Managed Kafka's minimum size | Unconfirmed | Fall back to `kafka_replication_factor = 2` |
-| Kafka sign-in | The token builder matches Google's sample and is unit-tested; the Java handler loads; neither has met a real broker | Watch the services' and Flink's logs for authentication errors after `make up` |
-| TLS trust for Kafka | `ssl.ca.location=probe` relies on the image's CA bundle | Same as above |
-| The Pig job that starts Flink | Script tested with stubs only | Check the Dataproc job's output and the YARN application list |
-| Flink checkpoints on `gs://` | Unconfirmed on Dataproc | Fall back to `hdfs:///flink-checkpoints` in `flink.env` |
-| Flink logs in Cloud Logging | Documented as `yarn-userlogs`, not seen | Search Cloud Logging for the warehouse-analytics application |
-| Pub/Sub push to the function, and dead letters | Ran on a pull-based stand-in | Run the smoke test and read the function's logs |
-| The function reaching Kafka over Direct VPC egress | Unconfirmed, including DNS for the bootstrap address | Same as above |
-| Workload Identity for pods | Configured, never exercised | Pods that cannot sign in fail at start-up with permission errors |
-| GKE Ingress | Paths and health check follow GKE's documented rules; never created | `make up` waits for its address; then `make smoke` |
-| Grafana's Cloud Logging data source | The dashboard's query format is unconfirmed | Open Central Logs; adjust the query in Grafana if empty |
-| Budget and kill switch | Plans tested with mocks | `make killswitch-check` confirms the permission without turning billing off |
-| HPA scale-out | Never ran on a cluster | Run the k6 test and watch `kubectl get hpa` |
-| Argo CD | Manifests render; no sync has happened | Check every Application is Synced and Healthy |
-| Container images | Never built, as this machine has no Docker | The first CI run |
-| Docker Compose | Parsed, never started | `make local-up` on a machine with Docker |
-| GitHub Actions | Parsed as YAML, never run | The first push |
-| Version differences | Python 3.13 here, 3.12 in images. Kafka 4.4 here; Managed Kafka defaults to 3.7. ZooKeeper 3.9.7 here, 3.9.6 in the image. Flink 1.17.2 here, 1.17.0 on Dataproc | Covered by the checks above |
-| Cost | About $0.90 an hour, from Google's list prices for `asia-south1`; sustained-use discounts and real data volumes are not counted | The budget emails and the Billing overview after the first session |
-
-All local runs were on one machine, so these figures show correct behaviour under failure, not production capacity. Repeat the load and failure tests on Google Cloud with `load-tests/orders.js` and `scripts/chaos.sh`, as set out in `docs/demo-runbook.md`, and save the results listed in `docs/evidence/README.md`.
+Everything this section once listed as unproven, from Kafka sign-in to the HPA and Argo CD, has since run on Google Cloud: see the live section at the top. What remains unproven is listed there under "Still unproven".
