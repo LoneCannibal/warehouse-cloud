@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
-from app.leader import Leader, _least_loaded
+from app.leader import ASSIGN_BATCH, Leader, _least_loaded
 from conftest import InProcessScheduler, RecordingProducer
 from warehouse_common import events, zk
 from warehouse_common.rpc import workers_pb2
@@ -261,6 +261,25 @@ def test_a_reclaimed_task_goes_ahead_of_a_higher_priority_backlog(settings, clie
     store.create_order({**order("urgent"), "priority": 9})
 
     assert [row["order_id"] for row in store.pending(10)] == ["old", "urgent"]
+
+
+def test_a_backlog_of_picks_does_not_starve_packing(settings, clients, store):
+    """Seen live on Google Cloud: under a deep PICK backlog, packers sat idle."""
+    client = clients()
+    leader = make_leader(settings, client, store)
+    # More pending picks than one assignment pass reads, with no picker to take them.
+    for n in range(ASSIGN_BATCH + 20):
+        store.create_order(order(f"backlog-{n:03d}"))
+    # Then one order whose pick is done, so its PACK task is the newest pending task.
+    store.create_order(order("ready"))
+    pick = next(t for t in store.pending(ASSIGN_BATCH * 2) if t["order_id"] == "ready")
+    store.assign(pick, "picker-gone", 1)
+    store.complete(pick["task_id"], "picker-gone", 1)
+    make_worker(settings, clients(), store, "packer", lambda task: None, capability="packing")
+    wait_for(lambda: client.get_children(f"{zk.WORKERS}/packing"))
+
+    assert leader.assign_once() == 1
+    wait_for(lambda: task_status(store, "ready.PACK")["status"] == "DONE")
 
 
 def test_idle_workers_share_the_work():

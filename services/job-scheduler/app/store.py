@@ -70,16 +70,29 @@ class TaskStore:
                 _create_task(conn, f"{order_id}.PICK.{zone}", order_id, "PICK", zone, lines, priority)
 
     def pending(self, limit: int) -> list[dict]:
+        """The next tasks to assign: up to `limit` of each task type.
+
+        Per type, because a PACK task only exists once its order's picks are done, so
+        it is always newer than the PICK backlog. Taking the oldest tasks of any type
+        let a deep PICK backlog fill every batch, and packers sat idle while it lasted.
+        """
         with self._pool.connection() as conn:
             return conn.execute(
                 """
                 SELECT task_id, order_id, task_type, zone, attempt, abandoned_at
-                FROM scheduler.tasks
-                WHERE status = 'PENDING'
+                FROM (
+                    SELECT task_id, order_id, task_type, zone, attempt, abandoned_at, priority, created_at,
+                           row_number() OVER (
+                               PARTITION BY task_type
+                               ORDER BY abandoned_at IS NULL, priority DESC, created_at
+                           ) AS place
+                    FROM scheduler.tasks
+                    WHERE status = 'PENDING'
+                ) queued
+                WHERE place <= %s
                 -- A reclaimed task goes first. Its order already lost time to a failure,
                 -- and behind a backlog its recovery time would be queueing, not recovery.
                 ORDER BY abandoned_at IS NULL, priority DESC, created_at
-                LIMIT %s
                 """,
                 (limit,),
             ).fetchall()

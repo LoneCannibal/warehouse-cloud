@@ -4,7 +4,7 @@ Each member demonstrates their own two tasks and answers questions on them. The 
 
 ## Before the demo
 
-Run `make up` at least an hour beforehand, because Managed Kafka alone takes 20 to 30 minutes. Then check:
+Run `make up` at least an hour beforehand, on a stable network, because Managed Kafka alone takes 20 to 30 minutes and the load balancer another 10 after Argo CD syncs. Then check:
 
 ```bash
 BASE_URL=http://<load-balancer-ip> make smoke
@@ -81,11 +81,13 @@ Explain why queue depth needs state that outlives a window.
 **Show the HPA scaling.** Raise the load, and watch in two terminals:
 
 ```bash
-k6 run -e BASE_URL=http://<load-balancer-ip> -e PEAK_RPS=60 -e HOLD=8m load-tests/orders.js
+k6 run -e BASE_URL=http://<load-balancer-ip> -e PEAK_RPS=40 -e RAMP=1m -e HOLD=4m load-tests/orders.js
 kubectl -n warehouse get hpa -w
 ```
 
-Show Live Workers rising in Warehouse KPIs. New Picking pods joined ZooKeeper and started receiving work with no scheduler change.
+In the live test on Google Cloud, Picking went from 2 to 6 pods and Order Intake from 2 to 4 within two minutes of the ramp. Show Live Workers rising in Warehouse KPIs: new Picking pods joined ZooKeeper and started receiving work with no scheduler change.
+
+Offering 40 orders a second is more than the stack completes, so a backlog builds and drains for several minutes after k6 stops. That is expected, and it shows that nothing is lost: run the reconciliation in `docs/evidence/README.md` afterwards.
 
 **Show ZooKeeper under failure.** Keep the load running, and keep Warehouse KPIs on screen.
 
