@@ -95,6 +95,18 @@ def test_first_run_submits_the_job_with_google_sign_in(sandbox):
     assert "--checkpoint-dir gs://dataproc/flink-checkpoints" in submitted
 
 
+def test_the_taskmanager_fits_the_two_vcores_yarn_offers(sandbox):
+    # The JobManager takes 1 vcore. A TaskManager asking 1 per slot would need 2 more.
+    stub_flink_env(sandbox)
+    stub_yarn(sandbox)
+    sandbox.stub("flink")
+
+    sandbox.run(["bash", str(SUBMIT_FLINK), FLINK_ENV])
+
+    submitted = next(call for call in sandbox.calls if call.startswith("flink run"))
+    assert "-yD yarn.containers.vcores=1" in submitted
+
+
 def test_redeploy_kills_the_running_job_first(sandbox):
     stub_flink_env(sandbox)
     stub_yarn(sandbox, "application_17_0003 warehouse-analytics")

@@ -107,6 +107,25 @@ run "teammates_get_no_billing_role" {
   }
 }
 
+run "every_runtime_account_is_created_here_with_only_its_own_roles" {
+  command = plan
+
+  assert {
+    condition     = length(google_service_account.runtime) == 11
+    error_message = "infra/runtime looks up 11 accounts: 7 workloads, GKE nodes, Dataproc, and two for Dispatch."
+  }
+
+  assert {
+    condition     = contains(keys(google_project_iam_member.runtime), "wh-grafana roles/logging.viewer")
+    error_message = "Grafana needs to read Cloud Logging for the central logs dashboard."
+  }
+
+  assert {
+    condition     = alltrue([for binding in google_project_iam_member.runtime : !contains(["roles/owner", "roles/editor"], binding.role)])
+    error_message = "No runtime account should hold a broad role."
+  }
+}
+
 run "only_this_repository_can_use_the_ci_identity" {
   command = plan
 

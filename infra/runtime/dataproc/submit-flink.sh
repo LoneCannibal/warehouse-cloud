@@ -28,7 +28,11 @@ for app in $(yarn application -list -appStates RUNNING,ACCEPTED 2>/dev/null \
   yarn application -kill "$app"
 done
 
-flink run -d -m yarn-cluster -ynm "$APP_NAME" -yjm 1024m -ytm 2048m -ys 2 "$JAR" \
+# The single node offers YARN 2 vcores, and Dataproc's scheduler counts vcores as well
+# as memory. Flink would ask one vcore per slot for the TaskManager, which with the
+# JobManager's comes to 3, and the TaskManager would never be placed. So it asks for 1.
+flink run -d -m yarn-cluster -ynm "$APP_NAME" -yjm 1024m -ytm 2048m -ys 2 \
+  -yD yarn.containers.vcores=1 "$JAR" \
   --bootstrap "$KAFKA_BOOTSTRAP" \
   --kafka-auth google \
   --checkpoint-dir "$CHECKPOINT_DIR"

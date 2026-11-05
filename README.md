@@ -126,7 +126,7 @@ make preflight                                                  # vCPUs free, ov
 
 ### 5. Create the long-lived resources
 
-This makes the state bucket, image registry, Firestore, CI identity, team access, the budget and the kill switch.
+This makes the state bucket, image registry, Firestore, CI identity, team access, the budget, the kill switch, and the service accounts the running stack uses. Google limits how many service accounts a project may create per minute, so if it stops with that error, wait a minute and run `make bootstrap` again.
 
 ```bash
 cp infra/bootstrap/terraform.tfvars.example infra/bootstrap/terraform.tfvars   # then edit it
@@ -157,7 +157,7 @@ make flink-jar
 
 ### 8. Bring everything up
 
-Managed Kafka alone takes 20 to 30 minutes, so allow an hour before a demo.
+Managed Kafka alone takes 20 to 30 minutes, so allow an hour before a demo, and run it on a stable network: Terraform does not retry a failed DNS lookup. For a private repository, `make up` reads Argo CD's read-only deploy key from `../argocd_deploy_key`, outside the repository, or from `DEPLOY_KEY_FILE`.
 
 ```bash
 cp infra/runtime/terraform.tfvars.example infra/runtime/terraform.tfvars   # then edit it

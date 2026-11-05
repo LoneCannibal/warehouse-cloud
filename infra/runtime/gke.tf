@@ -12,25 +12,6 @@ locals {
   planned_vcpus = var.gke_node_count * lookup(local.machine_vcpus, var.gke_machine_type, 99) + lookup(local.machine_vcpus, var.dataproc_machine_type, 99)
 }
 
-resource "google_service_account" "gke_nodes" {
-  account_id   = "gke-nodes"
-  display_name = "GKE nodes"
-}
-
-resource "google_project_iam_member" "gke_nodes" {
-  for_each = toset([
-    "roles/artifactregistry.reader",
-    "roles/logging.logWriter",
-    "roles/monitoring.metricWriter",
-    "roles/monitoring.viewer",
-    "roles/stackdriver.resourceMetadata.writer",
-  ])
-
-  project = var.project_id
-  role    = each.key
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
-}
-
 # Zonal, because the GKE free tier pays the management fee of one zonal cluster.
 resource "google_container_cluster" "this" {
   name     = "warehouse"
@@ -52,9 +33,9 @@ resource "google_container_cluster" "this" {
 
   node_config {
     machine_type    = var.gke_machine_type
-    disk_size_gb    = 20
+    disk_size_gb    = 30
     disk_type       = "pd-standard"
-    service_account = google_service_account.gke_nodes.email
+    service_account = data.google_service_account.gke_nodes.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 
@@ -88,7 +69,12 @@ resource "google_container_cluster" "this" {
 
   deletion_protection = false
 
-  depends_on = [google_project_iam_member.gke_nodes]
+  # node_config only describes the temporary pool. Once it is gone, GKE reports the
+  # worker pool's settings here instead, which must not trigger an update.
+  lifecycle {
+    ignore_changes = [node_config]
+  }
+
 }
 
 resource "google_container_node_pool" "workers" {
@@ -101,7 +87,7 @@ resource "google_container_node_pool" "workers" {
     machine_type    = var.gke_machine_type
     disk_size_gb    = 30
     disk_type       = "pd-standard"
-    service_account = google_service_account.gke_nodes.email
+    service_account = data.google_service_account.gke_nodes.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
 
     workload_metadata_config {

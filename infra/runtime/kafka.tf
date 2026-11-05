@@ -4,6 +4,10 @@
 # Creation usually takes 20 to 30 minutes.
 
 locals {
+  # The provider gives the bootstrap host alone; SASL clients connect on port 9092.
+  # Python's client assumes 9092 when no port is given, but Java's refuses the address.
+  kafka_bootstrap = "${google_managed_kafka_cluster.this.bootstrap_address}:9092"
+
   topics = {
     "warehouse.orders"            = 6
     "warehouse.task-events"       = 6

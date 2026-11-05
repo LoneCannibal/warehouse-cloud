@@ -32,8 +32,8 @@ mock_provider "google" {
     }
   }
 
-  mock_resource "google_service_account" {
-    override_during = plan
+  # The accounts come from infra/bootstrap; this stack only looks them up.
+  mock_data "google_service_account" {
     defaults = {
       email = "mock-account@group18-warehouse.iam.gserviceaccount.com"
       name  = "projects/group18-warehouse/serviceAccounts/mock-account@group18-warehouse.iam.gserviceaccount.com"
@@ -44,7 +44,8 @@ mock_provider "google" {
   mock_resource "google_managed_kafka_cluster" {
     override_during = plan
     defaults = {
-      bootstrap_address = "bootstrap.warehouse.asia-south1.managedkafka.group18-warehouse.cloud.goog:9092"
+      # Like the real provider: the host alone, with no port.
+      bootstrap_address = "bootstrap-abc123.9132195d.asia-south1.managedkafka.s.cloud.goog"
     }
   }
 }
@@ -156,8 +157,13 @@ run "the_flink_job_is_started_on_the_cluster" {
   }
 
   assert {
-    condition     = strcontains(google_storage_bucket_object.flink_env.content, "KAFKA_BOOTSTRAP=bootstrap.warehouse")
-    error_message = "flink.env must carry the Kafka bootstrap address."
+    condition     = strcontains(google_storage_bucket_object.flink_env.content, "KAFKA_BOOTSTRAP=bootstrap-abc123.9132195d.asia-south1.managedkafka.s.cloud.goog:9092\n")
+    error_message = "flink.env must carry the bootstrap address with its port. Java's Kafka client refuses an address without one."
+  }
+
+  assert {
+    condition     = endswith(kubernetes_config_map_v1.infra_outputs.data["KAFKA_BOOTSTRAP"], ":9092") && endswith(google_cloudfunctions2_function.dispatch.service_config[0].environment_variables["KAFKA_BOOTSTRAP"], ":9092")
+    error_message = "Every client must get the bootstrap address with its port."
   }
 
   assert {
@@ -180,7 +186,7 @@ run "pods_get_google_identities_without_keys" {
   }
 
   assert {
-    condition     = google_project_iam_member.workload["grafana roles/logging.viewer"].role == "roles/logging.viewer"
-    error_message = "Grafana needs to read Cloud Logging for the central logs dashboard."
+    condition     = google_service_account_iam_member.workload_identity["grafana"].member == "serviceAccount:group18-warehouse.svc.id.goog[monitoring/grafana]"
+    error_message = "Grafana's Kubernetes account must be allowed to act as its Google account."
   }
 }

@@ -8,6 +8,14 @@ REGION="${REGION:-asia-south1}"
 
 ./scripts/preflight.sh
 
+# A private repository needs Argo CD's read-only deploy key. It is kept outside the
+# repository, and reaches Terraform only through this environment variable.
+KEY_FILE="${DEPLOY_KEY_FILE:-../argocd_deploy_key}"
+if [ -z "${TF_VAR_git_ssh_private_key:-}" ] && [ -f "$KEY_FILE" ]; then
+  TF_VAR_git_ssh_private_key="$(cat "$KEY_FILE")"
+  export TF_VAR_git_ssh_private_key
+fi
+
 terraform -chdir=infra/runtime init -backend-config=backend.hcl -input=false
 terraform -chdir=infra/runtime apply
 

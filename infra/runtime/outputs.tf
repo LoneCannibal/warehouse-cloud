@@ -9,8 +9,8 @@ output "cluster_zone" {
 }
 
 output "kafka_bootstrap" {
-  description = "Managed Kafka bootstrap address, SASL on port 9092."
-  value       = google_managed_kafka_cluster.this.bootstrap_address
+  description = "Managed Kafka bootstrap address, with the SASL port."
+  value       = local.kafka_bootstrap
 }
 
 output "sql_private_ip" {

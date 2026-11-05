@@ -14,12 +14,19 @@ resource "google_dataproc_cluster" "analytics" {
     temp_bucket    = google_storage_bucket.dataproc.name
 
     gce_cluster_config {
-      zone                   = var.zone
-      subnetwork             = google_compute_subnetwork.data.id
-      internal_ip_only       = true
-      service_account        = google_service_account.dataproc.email
-      service_account_scopes = ["cloud-platform"]
-      tags                   = ["dataproc"]
+      zone = var.zone
+      # Written as Google stores them, so a plan finds no difference. Dataproc adds the
+      # last three scopes itself, and a difference in scopes would rebuild the cluster.
+      subnetwork       = google_compute_subnetwork.data.self_link
+      internal_ip_only = true
+      service_account  = data.google_service_account.dataproc.email
+      service_account_scopes = [
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/cloud.useraccounts.readonly",
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+      ]
+      tags = ["dataproc"]
     }
 
     master_config {
@@ -65,7 +72,6 @@ resource "google_dataproc_cluster" "analytics" {
   }
 
   depends_on = [
-    google_project_iam_member.dataproc,
     google_storage_bucket_iam_member.dataproc_bucket,
     google_compute_firewall.dataproc_internal,
     google_compute_router_nat.this,
@@ -78,7 +84,7 @@ resource "google_storage_bucket_object" "flink_env" {
   bucket = google_storage_bucket.dataproc.name
   content = join("\n", [
     "JAR_URI=gs://${local.artifacts_bucket}/${var.flink_jar_object}",
-    "KAFKA_BOOTSTRAP=${google_managed_kafka_cluster.this.bootstrap_address}",
+    "KAFKA_BOOTSTRAP=${local.kafka_bootstrap}",
     "CHECKPOINT_DIR=gs://${google_storage_bucket.dataproc.name}/flink-checkpoints",
     "",
   ])
@@ -109,7 +115,6 @@ resource "google_dataproc_job" "start_flink" {
   depends_on = [
     google_storage_bucket_object.flink_env,
     google_storage_bucket_object.submit_flink,
-    google_storage_bucket_iam_member.dataproc_reads_the_jar,
     google_managed_kafka_topic.this,
   ]
 }

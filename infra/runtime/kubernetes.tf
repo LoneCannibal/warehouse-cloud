@@ -27,7 +27,7 @@ resource "kubernetes_config_map_v1" "infra_outputs" {
 
   data = {
     GCP_PROJECT        = var.project_id
-    KAFKA_BOOTSTRAP    = google_managed_kafka_cluster.this.bootstrap_address
+    KAFKA_BOOTSTRAP    = local.kafka_bootstrap
     KAFKA_AUTH         = "google"
     DATA_BUCKET        = google_storage_bucket.data.name
     FIRESTORE_DATABASE = local.firestore_database
@@ -54,7 +54,7 @@ resource "kubernetes_service_account_v1" "workload" {
     name      = each.key
     namespace = kubernetes_namespace_v1.this[each.value.namespace].metadata[0].name
     annotations = {
-      "iam.gke.io/gcp-service-account" = google_service_account.workload[each.key].email
+      "iam.gke.io/gcp-service-account" = data.google_service_account.workload[each.key].email
     }
   }
 }

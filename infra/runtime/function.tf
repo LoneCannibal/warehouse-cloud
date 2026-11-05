@@ -57,7 +57,7 @@ resource "google_cloudfunctions2_function" "dispatch" {
     max_instance_count    = 3
     available_memory      = "512M"
     timeout_seconds       = 60
-    service_account_email = google_service_account.dispatch.email
+    service_account_email = data.google_service_account.dispatch.email
     # Pub/Sub push must reach the function. IAM still rejects any caller other than
     # the push account, because nobody else holds run.invoker.
     ingress_settings = "ALLOW_ALL"
@@ -66,7 +66,7 @@ resource "google_cloudfunctions2_function" "dispatch" {
       GCP_PROJECT          = var.project_id
       FIRESTORE_DATABASE   = local.firestore_database
       SHIPMENTS_COLLECTION = "shipments"
-      KAFKA_BOOTSTRAP      = google_managed_kafka_cluster.this.bootstrap_address
+      KAFKA_BOOTSTRAP      = local.kafka_bootstrap
       KAFKA_AUTH           = "google"
     }
 
@@ -79,14 +79,14 @@ resource "google_cloudfunctions2_function" "dispatch" {
     direct_vpc_egress = "VPC_EGRESS_ALL_TRAFFIC"
   }
 
-  depends_on = [google_project_iam_member.dispatch, google_storage_bucket_iam_member.dispatch_reads_manifests_and_writes_labels]
+  depends_on = [google_storage_bucket_iam_member.dispatch_reads_manifests_and_writes_labels]
 }
 
 resource "google_cloud_run_service_iam_member" "push_invokes_dispatch" {
   location = var.region
   service  = google_cloudfunctions2_function.dispatch.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.dispatch_push.email}"
+  member   = "serviceAccount:${data.google_service_account.dispatch_push.email}"
 }
 
 resource "google_pubsub_subscription" "dispatch" {
@@ -98,7 +98,7 @@ resource "google_pubsub_subscription" "dispatch" {
     push_endpoint = google_cloudfunctions2_function.dispatch.service_config[0].uri
 
     oidc_token {
-      service_account_email = google_service_account.dispatch_push.email
+      service_account_email = data.google_service_account.dispatch_push.email
     }
   }
 
@@ -133,7 +133,7 @@ resource "google_pubsub_subscription_iam_member" "dead_letter_subscriber" {
 }
 
 resource "google_service_account_iam_member" "pubsub_signs_push_requests" {
-  service_account_id = google_service_account.dispatch_push.name
+  service_account_id = data.google_service_account.dispatch_push.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = local.pubsub_agent
 }
