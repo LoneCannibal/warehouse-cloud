@@ -1,0 +1,10 @@
+# Runs the function outside Cloud Run, for Docker Compose. See local_runner.py.
+FROM python:3.12-slim
+
+WORKDIR /srv
+COPY requirements.txt /srv/
+RUN pip install --no-cache-dir -r requirements.txt google-cloud-pubsub==2.43.0
+COPY main.py kafka_auth.py local_runner.py /srv/
+
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "local_runner.py"]

@@ -1,0 +1,55 @@
+# Flink runs on Dataproc rather than Kubernetes, so GitOps does not apply to it. The job
+# is rebuilt here and replaced by a Dataproc job running the same script Terraform uses.
+# Skipped until the GCP_WORKLOAD_IDENTITY_PROVIDER repository variable exists.
+name: flink
+
+on:
+  # Also runnable by hand, from the Actions tab or `gh workflow run`.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - services/analytics-flink/**
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  CLUSTER: warehouse-analytics
+
+jobs:
+  deploy:
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Dataproc image 2.2 runs Flink 1.17 on Java 11.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: maven
+      - name: Build and test
+        working-directory: services/analytics-flink
+        run: mvn -q -B package
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Upload the JAR
+        run: |
+          gcloud storage cp services/analytics-flink/target/analytics-flink-1.0.0.jar \
+            "gs://$PROJECT_ID-artifacts/flink/analytics-flink.jar"
+      - name: Replace the running job, if the cluster is up
+        run: |
+          if ! gcloud dataproc clusters describe "$CLUSTER" --region "$REGION" > /dev/null 2>&1; then
+            echo "No cluster running. It picks up this JAR when it next starts."
+            exit 0
+          fi
+          BUCKET="$PROJECT_ID-dataproc"
+          gcloud dataproc jobs submit pig --cluster "$CLUSTER" --region "$REGION" \
+            -e "fs -cp -f gs://$BUCKET/dataproc/submit-flink.sh file:///tmp/submit-flink.sh; sh chmod 750 /tmp/submit-flink.sh; sh /tmp/submit-flink.sh gs://$BUCKET/dataproc/flink.env"

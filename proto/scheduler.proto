@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package warehouse.scheduler.v1;
+
+// Called by Picking and Packing workers. Any replica can serve these, because
+// the fencing check lives in the database rather than in the leader.
+service JobScheduler {
+  rpc GetTask (GetTaskRequest) returns (GetTaskResponse);
+  rpc CompleteTask (CompleteTaskRequest) returns (CompleteTaskResponse);
+}
+
+message TaskLine {
+  string sku = 1;
+  int32 quantity = 2;
+  string zone = 3;
+  string bin = 4;
+}
+
+message GetTaskRequest {
+  string task_id = 1;
+}
+
+message GetTaskResponse {
+  bool found = 1;
+  string task_id = 2;
+  string order_id = 3;
+  string task_type = 4;
+  string zone = 5;
+  int32 attempt = 6;
+  repeated TaskLine lines = 7;
+}
+
+// attempt is the fencing token: a completion from an old attempt is rejected.
+message CompleteTaskRequest {
+  string task_id = 1;
+  string worker_id = 2;
+  int32 attempt = 3;
+}
+
+message CompleteTaskResponse {
+  bool accepted = 1;
+  string reason = 2;
+}

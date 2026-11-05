@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: warehouse-services
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  {{- include "warehouse.metadata" . | nindent 2 }}
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: gitops/services/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: warehouse
+  syncPolicy:
+    {{- include "warehouse.syncPolicy" . | nindent 4 }}

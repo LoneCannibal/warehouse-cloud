@@ -1,0 +1,26 @@
+# Terraform. Keep .terraform.lock.hcl, which pins provider versions.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+# Function sources that Terraform zips during a plan.
+.build/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+.venv/
+.pytest_cache/
+
+# Java
+target/
+
+# Secrets and local files
+*.pem
+deploy_key*
+.env
+.DS_Store

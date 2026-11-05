@@ -1,0 +1,17 @@
+# Shared image for the Python services. Build from the repository root:
+#   docker build -f services/Dockerfile.python --build-arg SERVICE=picking .
+FROM python:3.12-slim
+
+ARG SERVICE
+
+WORKDIR /srv
+COPY libs/warehouse_common /srv/libs/warehouse_common
+RUN pip install --no-cache-dir /srv/libs/warehouse_common
+
+COPY services/${SERVICE}/app /srv/app
+
+RUN useradd --uid 10001 --no-create-home appuser
+USER 10001
+
+EXPOSE 8080 50051
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]

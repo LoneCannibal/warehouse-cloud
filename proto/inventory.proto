@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package warehouse.inventory.v1;
+
+// Synchronous stock operations. Order Intake reserves, Picking confirms.
+service Inventory {
+  rpc ReserveStock (ReserveStockRequest) returns (ReserveStockResponse);
+  rpc ReleaseStock (ReleaseStockRequest) returns (ReleaseStockResponse);
+  rpc ConfirmPick (ConfirmPickRequest) returns (ConfirmPickResponse);
+}
+
+message OrderLine {
+  string sku = 1;
+  int32 quantity = 2;
+}
+
+message Allocation {
+  string sku = 1;
+  int32 quantity = 2;
+  string zone = 3;
+  string bin = 4;
+}
+
+message ReserveStockRequest {
+  string order_id = 1;
+  repeated OrderLine lines = 2;
+}
+
+message ReserveStockResponse {
+  bool reserved = 1;
+  string reason = 2;
+  repeated Allocation allocations = 3;
+}
+
+message ReleaseStockRequest {
+  string order_id = 1;
+}
+
+message ReleaseStockResponse {
+  bool released = 1;
+}
+
+// task_id makes this idempotent: a reclaimed task may confirm the same pick again.
+message ConfirmPickRequest {
+  string task_id = 1;
+  string order_id = 2;
+  repeated OrderLine lines = 3;
+}
+
+message ConfirmPickResponse {
+  bool confirmed = 1;
+}

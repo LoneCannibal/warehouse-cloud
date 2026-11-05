@@ -1,0 +1,25 @@
+# The Grafana sidecar loads every ConfigMap with this label, so changing a dashboard
+# is a Git commit like any other change. The JSON comes from scripts/gen_dashboards.py.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+  - name: dashboard-service-red
+    files:
+      - service-red.json
+  - name: dashboard-cluster-health
+    files:
+      - cluster-health.json
+  - name: dashboard-zookeeper
+    files:
+      - zookeeper.json
+  - name: dashboard-warehouse-kpis
+    files:
+      - warehouse-kpis.json
+  - name: dashboard-central-logs
+    files:
+      - central-logs.json

@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars, which Git ignores.
+project_id      = "group18-warehouse"
+billing_account = "0X0X0X-0X0X0X-0X0X0X" # gcloud billing accounts list
+github_repo     = "YOUR_GITHUB_USER/warehouse-cloud"
+
+# Teammates' Google accounts. They get no billing access.
+team_members = ["aman@example.com", "pranjal@example.com", "bhagavath@example.com"]
+
+# The kill switch turns billing off at this spend, in the billing account's currency,
+# counted across every project on the account. Leave a wide margin below the credit
+# left, because cost reports lag by hours. Example: 26,988 INR of credit left.
+budget_amount     = 22000
+budget_currency   = "INR"
+budget_start_date = "2026-11-05"

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: job-scheduler
+  labels:
+    app.kubernetes.io/name: job-scheduler
+    app.kubernetes.io/part-of: warehouse
+spec:
+  selector:
+    app.kubernetes.io/name: job-scheduler
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Headless, so DNS returns every pod IP and the client can balance across them.
+# A normal ClusterIP would pin each long-lived gRPC connection to one pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: job-scheduler-grpc
+  labels:
+    app.kubernetes.io/name: job-scheduler
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: job-scheduler
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc

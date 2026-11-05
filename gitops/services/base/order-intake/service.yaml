@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-intake
+  labels:
+    app.kubernetes.io/name: order-intake
+    app.kubernetes.io/part-of: warehouse
+spec:
+  selector:
+    app.kubernetes.io/name: order-intake
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

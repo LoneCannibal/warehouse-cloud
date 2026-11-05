@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-intake
+  labels:
+    app.kubernetes.io/name: order-intake
+    app.kubernetes.io/part-of: warehouse
+spec:
+  # No replicas field: the HPA owns the count, and a value here would make
+  # Argo CD self-heal fight the autoscaler on every sync.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: order-intake
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: order-intake
+        app.kubernetes.io/part-of: warehouse
+    spec:
+      serviceAccountName: order-intake
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: order-intake
+          image: warehouse/order-intake:bootstrap
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: infra-outputs
+            - configMapRef:
+                name: warehouse-config
+          env:
+            - name: DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: warehouse-database
+                  key: DB_DSN
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            # An HPA measures CPU as a share of this request. At the measured 3 to 5 ms
+            # per request, 30 orders/s is at most 75m per pod, so a 250m request would
+            # stay at 30% or less and never reach the 60% target.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

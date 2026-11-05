@@ -1,0 +1,15 @@
+# One rule covers every service, because each exposes /metrics on a port named http.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: warehouse-services
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: warehouse
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

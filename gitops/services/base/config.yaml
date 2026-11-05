@@ -1,0 +1,13 @@
+# Addresses inside the cluster. The Google Cloud endpoints come from infra-outputs, which Terraform writes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: warehouse-config
+data:
+  ZK_HOSTS: zookeeper-0.zookeeper-headless:2181,zookeeper-1.zookeeper-headless:2181,zookeeper-2.zookeeper-headless:2181
+  ZK_SESSION_TIMEOUT: "10"
+  GRPC_PORT: "50051"
+  INVENTORY_TARGET: dns:///inventory-grpc.warehouse.svc.cluster.local:50051
+  WORKERS_TARGET: dns:///worker-registry-grpc.warehouse.svc.cluster.local:50051
+  SCHEDULER_TARGET: dns:///job-scheduler-grpc.warehouse.svc.cluster.local:50051
+  SCHEDULER_URL: http://job-scheduler:8080

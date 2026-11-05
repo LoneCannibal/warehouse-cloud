@@ -1,0 +1,10 @@
+# Keeps a standby available through node drains, so failover always has a successor.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: job-scheduler
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: job-scheduler

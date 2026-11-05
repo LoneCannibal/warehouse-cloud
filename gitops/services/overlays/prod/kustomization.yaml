@@ -1,0 +1,28 @@
+# CI rewrites the images block on every build. That commit is what triggers a deployment.
+# PROJECT_ID is replaced by the first CI run, with the project from the GitHub variables.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: warehouse/order-intake
+    newName: asia-south1-docker.pkg.dev/PROJECT_ID/warehouse/order-intake
+    newTag: bootstrap
+  - name: warehouse/inventory
+    newName: asia-south1-docker.pkg.dev/PROJECT_ID/warehouse/inventory
+    newTag: bootstrap
+  - name: warehouse/job-scheduler
+    newName: asia-south1-docker.pkg.dev/PROJECT_ID/warehouse/job-scheduler
+    newTag: bootstrap
+  - name: warehouse/worker-registry
+    newName: asia-south1-docker.pkg.dev/PROJECT_ID/warehouse/worker-registry
+    newTag: bootstrap
+  - name: warehouse/picking
+    newName: asia-south1-docker.pkg.dev/PROJECT_ID/warehouse/picking
+    newTag: bootstrap
+  - name: warehouse/packing
+    newName: asia-south1-docker.pkg.dev/PROJECT_ID/warehouse/packing
+    newTag: bootstrap
+  - name: warehouse/analytics-api
+    newName: asia-south1-docker.pkg.dev/PROJECT_ID/warehouse/analytics-api
+    newTag: bootstrap

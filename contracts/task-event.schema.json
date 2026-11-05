@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "warehouse.task-events",
+  "description": "Lifecycle events for picking, packing and dispatch. Consumed by Flink and the Job Scheduler.",
+  "type": "object",
+  "required": ["event_id", "event_type", "task_id", "order_id", "task_type", "zone", "attempt", "ts"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string" },
+    "event_type": {
+      "enum": [
+        "TASK_CREATED",
+        "TASK_ASSIGNED",
+        "TASK_STARTED",
+        "TASK_COMPLETED",
+        "TASK_ABANDONED",
+        "TASK_RECLAIMED",
+        "SHIPMENT_DISPATCHED"
+      ]
+    },
+    "task_id": { "type": "string" },
+    "order_id": { "type": "string" },
+    "task_type": { "enum": ["PICK", "PACK", "DISPATCH"] },
+    "zone": { "type": "string" },
+    "worker_id": { "type": ["string", "null"] },
+    "attempt": { "type": "integer", "minimum": 0 },
+    "recovery_ms": { "type": ["integer", "null"], "minimum": 0 },
+    "ts": { "type": "integer", "description": "Event time in epoch milliseconds." }
+  }
+}

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package warehouse.workers.v1;
+
+// The Job Scheduler asks which workers are live before it assigns a task.
+service WorkerRegistry {
+  rpc ListAvailable (ListAvailableRequest) returns (ListAvailableResponse);
+}
+
+message ListAvailableRequest {
+  string capability = 1;
+}
+
+message Worker {
+  string worker_id = 1;
+  string capability = 2;
+  repeated string zones = 3;
+  int32 slots = 4;
+}
+
+message ListAvailableResponse {
+  repeated Worker workers = 1;
+}

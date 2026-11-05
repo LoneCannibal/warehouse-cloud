@@ -1,0 +1,78 @@
+# Values for kube-prometheus-stack.
+alertmanager:
+  enabled: false
+
+# GKE runs these control-plane components itself and hides them, so scraping them
+# only produces errors. kube-proxy only listens on the node's loopback address.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 15s
+    retention: 3d
+    # Pick up ServiceMonitors from every namespace, not only this chart's own.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 150m
+        memory: 768Mi
+      limits:
+        memory: 1536Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+
+grafana:
+  # Terraform creates this service account, tied through Workload Identity to a Google
+  # account that may read Cloud Monitoring and Cloud Logging. No key file is involved.
+  serviceAccount:
+    create: false
+    name: grafana
+  plugins:
+    - googlecloud-logging-datasource
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+  additionalDataSources:
+    - name: Cloud Monitoring
+      type: stackdriver
+      uid: cloud-monitoring
+      access: proxy
+      jsonData:
+        authenticationType: gce
+    - name: Cloud Logging
+      type: googlecloud-logging-datasource
+      # The Central Logs dashboard refers to this data source by uid.
+      uid: cloud-logging
+      access: proxy
+      jsonData:
+        authenticationType: gce
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi

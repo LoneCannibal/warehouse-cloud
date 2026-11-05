@@ -1,0 +1,3 @@
+# infra/runtime/kubernetes.tf passes the real values to this chart.
+repoURL: https://github.com/example/warehouse-cloud.git
+targetRevision: main

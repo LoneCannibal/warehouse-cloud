@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "warehouse.analytics.results",
+  "description": "One record per zone per one-minute window, published by the Flink job.",
+  "type": "object",
+  "required": [
+    "zone", "window_start", "window_end", "tasks_created", "picks_completed", "packs_completed",
+    "dispatched", "tasks_abandoned", "tasks_reclaimed", "active_workers", "queue_depth", "mean_recovery_ms"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "zone": { "type": "string" },
+    "window_start": { "type": "integer" },
+    "window_end": { "type": "integer" },
+    "tasks_created": { "type": "integer" },
+    "picks_completed": { "type": "integer" },
+    "packs_completed": { "type": "integer" },
+    "dispatched": { "type": "integer" },
+    "tasks_abandoned": { "type": "integer" },
+    "tasks_reclaimed": { "type": "integer" },
+    "active_workers": { "type": "integer" },
+    "queue_depth": { "type": "integer" },
+    "mean_recovery_ms": { "type": "number" }
+  }
+}

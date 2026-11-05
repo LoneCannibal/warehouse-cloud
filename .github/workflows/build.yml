@@ -1,0 +1,81 @@
+# Builds images, then commits the new tags to gitops/. That commit is the deployment:
+# Argo CD sees it and rolls the change out. This pipeline never touches the cluster.
+#
+# It signs in to Google Cloud through Workload Identity Federation, so no key is
+# stored in GitHub. Skipped until the GCP_WORKLOAD_IDENTITY_PROVIDER repository
+# variable exists; `make bootstrap` prints the values to set.
+name: build
+
+on:
+  # Also runnable by hand, from the Actions tab or `gh workflow run`.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - services/**
+      - libs/**
+      - proto/**
+      - "!services/analytics-flink/**"
+      - "!services/dispatch-function/**"
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+  REGISTRY: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/warehouse
+
+jobs:
+  images:
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - order-intake
+          - inventory
+          - job-scheduler
+          - worker-registry
+          - picking
+          - packing
+          - analytics-api
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/Dockerfile.python
+          build-args: SERVICE=${{ matrix.service }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+
+  bump-image-tags:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Point the overlay at the new images
+        working-directory: gitops/services/overlays/prod
+        run: |
+          for service in order-intake inventory job-scheduler worker-registry picking packing analytics-api; do
+            kustomize edit set image "warehouse/$service=$REGISTRY/$service:${GITHUB_SHA}"
+          done
+      - name: Commit, which is what triggers the deployment
+        run: |
+          git config user.name "warehouse-ci"
+          git config user.email "warehouse-ci@users.noreply.github.com"
+          git add gitops/services/overlays/prod/kustomization.yaml
+          git commit -m "Deploy ${GITHUB_SHA::7}"
+          git push

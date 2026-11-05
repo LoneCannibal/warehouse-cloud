@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "warehouse.orders",
+  "description": "Published by Order Intake once stock is reserved. Consumed by the Job Scheduler leader.",
+  "type": "object",
+  "required": ["event_id", "event_type", "order_id", "customer", "priority", "lines", "ts"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string" },
+    "event_type": { "const": "ORDER_ACCEPTED" },
+    "order_id": { "type": "string" },
+    "customer": { "type": "string" },
+    "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
+    "ts": { "type": "integer" },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["sku", "quantity", "zone", "bin"],
+        "additionalProperties": false,
+        "properties": {
+          "sku": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "zone": { "type": "string" },
+          "bin": { "type": "string" }
+        }
+      }
+    }
+  }
+}

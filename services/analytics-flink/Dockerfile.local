@@ -1,0 +1,9 @@
+# Builds the job JAR and adds it to a Flink image, for Docker Compose.
+FROM maven:3.9-eclipse-temurin-11 AS build
+WORKDIR /src
+COPY pom.xml .
+COPY src ./src
+RUN mvn -q -B -DskipTests package
+
+FROM flink:1.17-java11
+COPY --from=build /src/target/analytics-flink-1.0.0.jar /opt/analytics-flink.jar

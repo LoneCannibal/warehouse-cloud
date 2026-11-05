@@ -1,0 +1,9 @@
+# One-shot container for Docker Compose. Stands in for what Terraform creates on Google Cloud.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir confluent-kafka==2.16.1 google-cloud-storage==3.17.1 google-cloud-pubsub==2.43.0
+
+COPY scripts/init_local_kafka.py /srv/init_local_kafka.py
+COPY scripts/init_local_gcp.py /srv/init_local_gcp.py
+
+CMD ["sh", "-c", "python /srv/init_local_kafka.py && python /srv/init_local_gcp.py"]

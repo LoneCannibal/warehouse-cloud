@@ -1,0 +1,106 @@
+{
+  "uid": "warehouse-logs",
+  "title": "Central Logs",
+  "tags": [
+    "warehouse"
+  ],
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "One order across every service, Flink and Dispatch included",
+      "type": "logs",
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "cloud-logging"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "((resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")) AND jsonPayload.order_id=\"$order_id\""
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Warnings and errors",
+      "type": "logs",
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "cloud-logging"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "((resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")) AND severity>=WARNING"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "All warehouse logs",
+      "type": "logs",
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "cloud-logging"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "(resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "order_id",
+        "label": "Order id",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "value": ""
+        }
+      }
+    ]
+  }
+}

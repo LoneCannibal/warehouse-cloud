@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars, which Git ignores.
+project_id   = "group18-warehouse"
+git_repo_url = "https://github.com/YOUR_GITHUB_USER/warehouse-cloud.git"
+
+# For a private repository, add a read-only deploy key on GitHub, use the git@ URL,
+# and either paste the private key here or export it:
+#   TF_VAR_git_ssh_private_key="$(cat deploy_key)"
+# git_ssh_private_key = ""
+
+# Eight vCPUs keeps the hourly cost down. A fourth node costs about $0.12 an hour more:
+# max_vcpus      = 10
+# gke_node_count = 4
+
+# If Managed Kafka refuses a replication factor of 3 at minimum size:
+# kafka_replication_factor = 2

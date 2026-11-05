@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "warehouse-common"
+version = "1.0.0"
+description = "Code shared by the Smart Warehouse Python services"
+requires-python = ">=3.12"
+dependencies = [
+    "confluent-kafka==2.16.1",
+    "fastapi==0.162.0",
+    "google-auth==2.62.1",
+    "google-cloud-firestore==2.34.1",
+    "google-cloud-storage==3.17.1",
+    "grpcio==1.85.1",
+    "httpx==0.28.1",
+    "kazoo==2.11.0",
+    "prometheus-client==0.26.0",
+    "protobuf==7.36.2",
+    "psycopg[binary,pool]==3.3.6",
+    "pydantic==2.14.2",
+    "uvicorn[standard]==0.54.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools==1.85.1",
+    "jsonschema",
+    "markdown",
+    "matplotlib",
+    "functions-framework==3.10.2",
+    "google-cloud-pubsub==2.43.0",
+    "pytest",
+    "pyyaml",
+    "xhtml2pdf",
+]
+
+[tool.setuptools.packages.find]
+include = ["warehouse_common*"]
