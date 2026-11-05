@@ -37,6 +37,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            # Tasks one pod works on at once. In the cloud each task waits on several
+            # network round trips, so two slots left pods idle with a backlog queued and
+            # their CPU too low for the HPA to react.
+            - name: WORKER_SLOTS
+              value: "4"
           readinessProbe:
             httpGet:
               path: /health
