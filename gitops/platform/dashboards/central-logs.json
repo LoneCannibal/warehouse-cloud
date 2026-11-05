@@ -33,6 +33,7 @@
       "targets": [
         {
           "refId": "A",
+          "query": "((resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")) AND jsonPayload.order_id=\"$order_id\"",
           "queryText": "((resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")) AND jsonPayload.order_id=\"$order_id\""
         }
       ]
@@ -59,6 +60,7 @@
       "targets": [
         {
           "refId": "A",
+          "query": "((resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")) AND severity>=WARNING",
           "queryText": "((resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")) AND severity>=WARNING"
         }
       ]
@@ -85,6 +87,7 @@
       "targets": [
         {
           "refId": "A",
+          "query": "(resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")",
           "queryText": "(resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"warehouse\") OR (resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"warehouse-dispatch\") OR (resource.type=\"cloud_dataproc_cluster\" AND resource.labels.cluster_name=\"warehouse-analytics\")"
         }
       ]

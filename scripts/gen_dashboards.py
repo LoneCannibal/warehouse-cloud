@@ -126,7 +126,10 @@ def logs_panel(index: int, title: str, query: str) -> dict:
         "datasource": {"type": "googlecloud-logging-datasource", "uid": "cloud-logging"},
         "gridPos": {"h": 12, "w": 24, "x": 0, "y": 12 * index},
         "options": {"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending"},
-        "targets": [{"refId": "A", "queryText": query}],
+        # Grafana fills in the cluster's own project only for a query in "query", so the
+        # dashboard holds no project id. "queryText" is the older field, kept for older
+        # plugin versions.
+        "targets": [{"refId": "A", "query": query, "queryText": query}],
     }
 
 
