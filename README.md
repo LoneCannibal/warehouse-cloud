@@ -5,6 +5,7 @@ A cloud-native fulfilment system for picking, packing and dispatch, with ZooKeep
 - Design: [docs/design-document.md](docs/design-document.md)
 - What has been tested, and what has not: [docs/verification.md](docs/verification.md)
 - Demo script: [docs/demo-runbook.md](docs/demo-runbook.md)
+- Demo guide, page by page in the console and terminal: [docs/demo-guide.md](docs/demo-guide.md)
 - Who owns what: [task_divison.txt](task_divison.txt)
 
 ## Repository layout
