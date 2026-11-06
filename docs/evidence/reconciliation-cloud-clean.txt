@@ -1,0 +1,4 @@
+Firestore shipments dispatched today: 9108
+Cloud Storage manifests: 9108, labels: 9108
+Flink windows written today: 
+Flink windows written today, read through the Analytics API: {'windows': 70, 'picks_completed': 15877, 'packs_completed': 8001, 'dispatched': 8001, 'tasks_abandoned': 15, 'tasks_reclaimed': 15}

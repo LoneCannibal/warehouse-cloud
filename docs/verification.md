@@ -46,10 +46,21 @@ All are fixed and committed. None could show up locally or against mocks.
 
 Two lessons that are not bugs: a dropped network connection interrupted the first `make up`, because Terraform does not retry a failed DNS lookup, so run it on a stable network; and offering 35 orders a second is more than this stack completes, so a backlog builds and drains after the load stops.
 
+### Clean rehearsal on 6 November 2026
+
+A full demo-day run from nothing, with the final code and no manual steps: `make up`, the checks, then `make down`.
+
+| Check | Result | Evidence |
+|---|---|---|
+| `make up` | 59 resources in 14 minutes with no errors, and no service accounts created. Argo CD synced all 5 Applications and all 18 pods ran 21 minutes after the start | |
+| Flink | Started by Terraform's Dataproc job and checkpointing every 30 seconds, with no manual restart | |
+| Public URL | The smoke test reached DISPATCHED. The first request returned 404 for about a minute while the load balancer rolled out its path rules | `smoke-clean-bringup.txt` |
+| Load and failures | k6 ran 9,108 orders at 25 a second, failure rate 0.0002, p95 561 ms. Picking scaled to 6 pods and Order Intake to 3. The leader kill, picker kill, picker hang and resume, and ZooKeeper leader kill all recovered | `k6-summary-clean.json`, `hpa-during-load-clean.txt`, `chaos-under-load-clean.txt` |
+| Packing fix | Packs kept completing while thousands of picks were still queued, and the backlog drained completely | `drain-clean.txt` |
+| Consistency | 9,108 of 9,108 orders dispatched; every task done; every pick confirmed once; no stock left reserved; no outbox rows left. Firestore had 9,108 shipments and Cloud Storage 9,108 manifests and 9,108 labels. Flink's closed windows agreed: packs and dispatches equal, and abandoned and reclaimed both 15 | `reconciliation-database-clean.json`, `reconciliation-cloud-clean.txt` |
+
 ### Still unproven
 
-- A clean `make bootstrap` and `make up` from nothing with the final code. The service accounts moved into `infra/bootstrap` after this run, and the run itself needed Kafka imported by hand after the network dropped and Flink restarted by hand twice for the fixes above.
-- The packing fix, live. It passes its integration test against real ZooKeeper and PostgreSQL.
 - The Central Logs dashboard in a browser. Its query returns logs through Grafana's API in the form the browser sends.
 - The billing account still asks to be verified. Until it is, Google may suspend it.
 

@@ -1,6 +1,6 @@
 # Evidence from Google Cloud
 
-Captured during the live test on 5 November 2026. `docs/verification.md` summarises each file.
+Captured during the live test on 5 November 2026, and the clean rehearsal on 6 November (files ending `-clean`). `docs/verification.md` summarises each file.
 
 | File | Shows |
 |---|---|

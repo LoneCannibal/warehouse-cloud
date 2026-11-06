@@ -171,7 +171,7 @@ BASE_URL=http://<printed-address> make smoke
 make down
 ```
 
-The order inside `make down` matters, and the script handles it. Kubernetes created the load balancer and the ZooKeeper disks, so they must go first, or Terraform cannot delete the network and the disks keep billing. The script finishes by listing anything left.
+The order inside `make down` matters, and the script handles it. Kubernetes created the load balancer and the ZooKeeper disks, so they must go first, or Terraform cannot delete the network and the disks keep billing. The script finishes by listing anything left. Expect it to stop with an error on two network objects, the `serverless` subnet and the Cloud SQL peering: Google holds them for a while after Cloud Run and Cloud SQL are deleted. They cost nothing, and the next `make up` reuses them.
 
 ### Teammates
 

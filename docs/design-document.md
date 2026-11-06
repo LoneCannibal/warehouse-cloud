@@ -288,7 +288,7 @@ Teammates have no billing role, so only the billing administrator can change how
 
 ## 15. Validation
 
-**Deployment status: deployed to Google Cloud and tested live on 5 November 2026, then torn down until the demo.** Full figures, evidence files and the remaining gaps are in `docs/verification.md`.
+**Deployment status: deployed to Google Cloud and tested live on 5 November 2026, rehearsed from nothing with the final code on 6 November, and torn down until the demo.** Full figures, evidence files and the remaining gaps are in `docs/verification.md`.
 
 The live test ran every requirement on the real services:
 
@@ -303,7 +303,7 @@ The live test ran every requirement on the real services:
 | g. Storage | Shipments in Firestore, manifests and labels in Cloud Storage and orders in Cloud SQL all agreed, at 11,515 dispatched orders mid-drain |
 | h. Observability | 42 Prometheus targets up, five Grafana dashboards, and one order followed across GKE and Cloud Run in Cloud Logging, with Flink's logs alongside |
 
-The live run found eight problems that local testing could not, all now fixed. The two most serious: the Kafka address came without a port, which Flink's client rejects, and under a deep backlog the scheduler starved the packers by always handing out the oldest pick tasks first. `docs/verification.md` lists all eight.
+The rehearsal repeated the load test and failure drills on a clean `make up`: 9,108 of 9,108 orders were dispatched, and every store agreed. The first live run found eight problems that local testing could not, all now fixed. The two most serious: the Kafka address came without a port, which Flink's client rejects, and under a deep backlog the scheduler starved the packers by always handing out the oldest pick tasks first. `docs/verification.md` lists all eight.
 
 Before this, the system was tested locally on real ZooKeeper, Kafka, PostgreSQL and Flink, with Google's emulators for Cloud Storage, Pub/Sub and Firestore. There, 2,145 of 2,145 orders were dispatched while four failures were injected, with a scheduler failover of 10.8 seconds. Automated tests cover the rest: 118 Python tests, 16 of them on a real ZooKeeper ensemble and PostgreSQL; 9 Flink tests; and 13 Terraform tests that pin the settings that decide the bill.
 

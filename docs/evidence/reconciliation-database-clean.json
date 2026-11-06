@@ -1,0 +1,13 @@
+{
+ "orders_accepted": 9108,
+ "orders_dispatched": 9108,
+ "tasks_by_status": {
+  "PACK DONE": 9108,
+  "PICK DONE": 17082
+ },
+ "max_attempt": 2,
+ "outbox_unsent": 0,
+ "pick_tasks_done": 17082,
+ "picks_confirmed_in_inventory": 17082,
+ "units_still_reserved": 0
+}
