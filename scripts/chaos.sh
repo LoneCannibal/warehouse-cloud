@@ -41,7 +41,12 @@ zookeeper_leader() {
 }
 
 first_picker() {
-  kubectl -n "$NS" get pods -l app.kubernetes.io/name=picking -o name | head -1 | cut -d/ -f2
+  # No `| head -1`: under pipefail, kubectl can die of SIGPIPE when head stops
+  # reading, and the whole script would abort.
+  local pods
+  pods=$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=picking -o name)
+  pods=${pods%%$'\n'*}
+  echo "${pods#pod/}"
 }
 
 case "${1:-status}" in
