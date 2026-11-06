@@ -293,32 +293,46 @@ EOF
 fi
 
 say "Google Cloud CLI"
-if reports gcloud "Google Cloud SDK" version; then
-  note "already installed: $(command -v gcloud)"
-elif [ -e "$HOME/google-cloud-sdk" ]; then
-  die "$HOME/google-cloud-sdk exists but gcloud does not run. Move that folder away and run this script again."
-else
+install_gcloud() {
+  [ -e "$HOME/google-cloud-sdk" ] &&
+    die "$HOME/google-cloud-sdk exists but its gcloud does not work. Move that folder away and run this script again."
   f=$(fetch "${SHA256[gcloud-$ARCH]}" "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-$GCLOUD-linux-$GCLOUD_ARCH.tar.gz")
   tar -xzf "$f" -C "$HOME"
   "$HOME/google-cloud-sdk/install.sh" --quiet --usage-reporting false --path-update true \
     --command-completion true --rc-path "$HOME/.bashrc" > "$TMP/gcloud-install.log" 2>&1 ||
-    { cat "$TMP/gcloud-install.log" >&2; die "the Google Cloud CLI installer failed"; }
+    {
+      cat "$TMP/gcloud-install.log" >&2
+      die "the Google Cloud CLI installer failed"
+    }
+  hash -r
   note "installed in $HOME/google-cloud-sdk"
+}
+add_components() {
+  gcloud components install kubectl gke-gcloud-auth-plugin --quiet > "$TMP/components.log" 2>&1
+}
+if reports gcloud "Google Cloud SDK" version; then
+  note "already installed: $(command -v gcloud)"
+else
+  install_gcloud
 fi
-# kubectl and the GKE sign-in plugin. A tarball install adds them as components; an
-# install from Google's apt repository needs them as packages.
+# kubectl and the GKE sign-in plugin, as gcloud components. A gcloud installed by
+# apt or snap cannot add components, so a copy of our own goes in ~/google-cloud-sdk,
+# which comes first on PATH.
 if ! command -v kubectl > /dev/null || ! command -v gke-gcloud-auth-plugin > /dev/null; then
   note "adding kubectl and gke-gcloud-auth-plugin"
-  if ! gcloud components install kubectl gke-gcloud-auth-plugin --quiet > "$TMP/components.log" 2>&1; then
-    if [ "$WITH_SUDO" -eq 1 ]; then
-      "${SUDO[@]}" apt-get update -q
-      "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -q kubectl google-cloud-cli-gke-gcloud-auth-plugin ||
-        die "could not install kubectl and gke-gcloud-auth-plugin"
-    else
+  if ! add_components; then
+    if [ "$(command -v gcloud)" = "$HOME/google-cloud-sdk/bin/gcloud" ]; then
       cat "$TMP/components.log" >&2
       die "could not install kubectl and gke-gcloud-auth-plugin"
     fi
+    note "$(command -v gcloud) cannot add components, so installing a separate copy"
+    install_gcloud
+    add_components || {
+      cat "$TMP/components.log" >&2
+      die "could not install kubectl and gke-gcloud-auth-plugin"
+    }
   fi
+  hash -r
 fi
 
 # ------------------------------------------------------------------ Python, PATH
