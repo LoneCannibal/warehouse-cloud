@@ -1,0 +1,3 @@
+# Keep LF line endings in every checkout, Windows included. Bash fails on the
+# carriage returns Git for Windows would otherwise add to scripts and the Makefile.
+* text=auto eol=lf

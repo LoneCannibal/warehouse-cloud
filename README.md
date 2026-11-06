@@ -70,31 +70,42 @@ Here is what stands in for each Google Cloud service:
 | Dataproc | Flink 1.17 JobManager and TaskManager containers |
 | GKE, load balancer | Docker networking |
 
+## Set up a computer
+
+One script installs every tool this project uses, at the versions it was tested with: the Google Cloud CLI with `kubectl`, Terraform, kustomize, Helm, kubeconform, k6, Maven with a Java 11 JDK, Docker, and a Python environment in `.venv`.
+
+**Linux** (Debian 13, or Ubuntu 24.04 and later):
+
+```bash
+./scripts/setup-linux.sh                # asks for your sudo password for apt and Docker
+./scripts/setup-linux.sh --no-sudo      # only what goes in your home folder
+```
+
+**Windows** (10 version 2004 or later, or 11): the scripts here are bash, so they run in WSL, a real Ubuntu inside Windows. From PowerShell, in the repository folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
+```
+
+The first run needs PowerShell opened as Administrator, and asks for a restart once WSL is on; run it again afterwards. It installs Ubuntu 24.04, copies the repository to `~/warehouse-cloud` inside it, and runs the Linux script there. Work from that copy, in the Ubuntu terminal.
+
+Both are safe to run again. Each download is checked against a pinned SHA-256, and a tool that is missing, broken or a different version is replaced.
+
 ## Run the tests
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-make install
-
+source .venv/bin/activate
 docker compose up -d zookeeper-1 zookeeper-2 zookeeper-3 postgres
 make test
 ```
 
-`make test` also needs Maven with JDK 11, `terraform`, `kustomize`, `helm` and `kubeconform`. None of the tests need a Google Cloud project. Terraform is planned against mocked providers.
+None of the tests need a Google Cloud project. Terraform is planned against mocked providers.
 
 ## Deploy to Google Cloud
 
 ### 1. Tools
 
-Install the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) into your home folder, with no sudo:
-
-```bash
-curl https://sdk.cloud.google.com | bash
-exec -l $SHELL
-gcloud components install kubectl gke-gcloud-auth-plugin
-```
-
-You also need Terraform 1.10 or later, and Maven with JDK 11 for the Flink job.
+Run the setup script for your system, from [Set up a computer](#set-up-a-computer).
 
 ### 2. Check the billing account
 

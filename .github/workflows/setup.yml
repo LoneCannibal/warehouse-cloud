@@ -1,0 +1,58 @@
+# Runs the setup scripts on clean machines. They install system packages with
+# sudo, so this is where the apt and Docker steps get tested.
+name: setup
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/setup-linux.sh
+      - scripts/setup-windows.ps1
+      - .github/workflows/setup.yml
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/setup-linux.sh
+      - name: A second run downloads nothing
+        run: |
+          ./scripts/setup-linux.sh | tee second.log
+          ! grep -q downloading second.log
+      - name: The installed tools run the tests
+        run: |
+          export PATH="$PWD/.venv/bin:$HOME/.local/bin:$HOME/google-cloud-sdk/bin:$PATH"
+          make test-manifests test-terraform test-flink test-unit
+
+  debian:
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/setup-linux.sh
+      - name: The installed tools run the tests
+        run: |
+          export PATH="$PWD/.venv/bin:$HOME/.local/bin:$HOME/google-cloud-sdk/bin:$PATH"
+          make test-manifests test-terraform test-flink test-unit
+          docker compose version
+
+  # GitHub's Windows machines cannot run WSL 2, so this checks what can be checked
+  # without it: the script parses, and is plain ASCII, which Windows PowerShell 5.1
+  # needs to read a file saved without a byte order mark.
+  windows-script:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: |
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/scripts/setup-windows.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+          if ((Get-Content -Raw scripts/setup-windows.ps1) -match '[^\x00-\x7F]') { "setup-windows.ps1 has a non-ASCII character"; exit 1 }
+          "ok"
