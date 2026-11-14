@@ -3,7 +3,7 @@ kind: Application
 metadata:
   name: warehouse-services
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-wave: "0"
   {{- include "warehouse.metadata" . | nindent 2 }}
 spec:
   project: default

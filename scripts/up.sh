@@ -36,6 +36,21 @@ if [ -z "${ADDRESS:-}" ]; then
   exit 1
 fi
 
+# Safety net. The Prometheus Operator checks once, at start-up, which of its resource
+# types exist. The CRDs now sync before it, but if it still started first it would never
+# create Prometheus, and every dashboard would stay empty. A fresh operator looks again.
+# The output is captured rather than piped to grep, which could abort under pipefail.
+for _ in $(seq 1 20); do
+  PROMETHEUS=$(kubectl -n monitoring get statefulset -l app.kubernetes.io/name=prometheus \
+    -o name 2>/dev/null || true)
+  [ -n "$PROMETHEUS" ] && break
+  sleep 15
+done
+if [ -z "${PROMETHEUS:-}" ]; then
+  echo "Prometheus has not started. Restarting its operator so it looks for its CRDs again."
+  kubectl -n monitoring delete pod -l app=kube-prometheus-stack-operator || true
+fi
+
 echo "Public URL: http://$ADDRESS"
 echo "The load balancer can take a few more minutes to pass its health checks."
 echo "Check it with: BASE_URL=http://$ADDRESS make smoke"

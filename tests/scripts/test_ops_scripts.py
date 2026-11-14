@@ -239,6 +239,39 @@ def test_up_prints_the_public_url(sandbox):
     assert sandbox.index_of("apply") < sandbox.index_of("get-credentials warehouse --zone asia-south1-a")
 
 
+def stub_up_cluster(sandbox: Sandbox, prometheus: bool) -> None:
+    stub_quota(sandbox)
+    sandbox.stub("terraform")
+    sandbox.stub("sleep")
+    statefulset = "echo statefulset.apps/prometheus-0" if prometheus else "exit 0"
+    sandbox.stub(
+        "kubectl",
+        '[[ "$*" == *"get ingress"* ]] && echo -n "34.120.0.10" && exit 0\n'
+        f'[[ "$*" == *"get statefulset"* ]] && {{ {statefulset}; exit 0; }}\n'
+        "exit 0",
+    )
+
+
+def test_up_restarts_the_prometheus_operator_if_prometheus_never_appears(sandbox):
+    stub_up_cluster(sandbox, prometheus=False)
+
+    result = sandbox.run(["bash", "scripts/up.sh"])
+
+    assert result.returncode == 0, result.stderr
+    assert "Restarting its operator" in result.stdout
+    assert sandbox.index_of("delete pod -l app=kube-prometheus-stack-operator") > 0
+    assert "http://34.120.0.10" in result.stdout
+
+
+def test_up_leaves_a_running_prometheus_alone(sandbox):
+    stub_up_cluster(sandbox, prometheus=True)
+
+    result = sandbox.run(["bash", "scripts/up.sh"])
+
+    assert result.returncode == 0, result.stderr
+    assert not any("delete pod" in call for call in sandbox.calls)
+
+
 def test_up_explains_itself_if_no_load_balancer_appears(sandbox):
     stub_quota(sandbox)
     sandbox.stub("terraform")

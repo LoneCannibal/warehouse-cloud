@@ -1,4 +1,9 @@
 # Values for kube-prometheus-stack.
+
+# The CRDs come from the monitoring-crds Application, which syncs first. See
+# gitops/apps/templates/platform.yaml for why the chart must not install them itself.
+crds:
+  enabled: false
 alertmanager:
   enabled: false
 

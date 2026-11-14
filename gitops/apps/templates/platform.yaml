@@ -1,3 +1,30 @@
+# The Prometheus Operator's CRDs, synced before anything that uses them. The operator
+# checks once, at start-up, which of its resource types exist, and switches off the
+# controller for any that are missing. When the CRDs came in the same sync as the
+# operator, it could start first and never create Prometheus.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-crds
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  {{- include "warehouse.metadata" . | nindent 2 }}
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus-operator-crds
+    # Matches the operator in kube-prometheus-stack 92.17.0 (v0.94.2).
+    targetRevision: 32.0.2
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- include "warehouse.syncPolicy" . | nindent 4 }}
+    syncOptions:
+      # These CRDs are too large for client-side apply's annotation.
+      - ServerSideApply=true
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -32,7 +59,7 @@ kind: Application
 metadata:
   name: dashboards
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "0"
   {{- include "warehouse.metadata" . | nindent 2 }}
 spec:
   project: default
@@ -51,7 +78,7 @@ kind: Application
 metadata:
   name: zookeeper
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "0"
   {{- include "warehouse.metadata" . | nindent 2 }}
 spec:
   project: default

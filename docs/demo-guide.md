@@ -67,19 +67,18 @@ k6 run -e BASE_URL=$BASE_URL -e PEAK_RPS=25 -e RAMP=1m -e HOLD=30m load-tests/or
 
 **Browser tabs, in demo order:**
 
-1. Billing → Overview, Credits, and Budgets & alerts
-2. Kubernetes Engine → Clusters → `warehouse`
-3. Argo CD at `https://localhost:8443`
-4. GitHub → the repository → Actions
-5. Cloud Storage → `g18-warehouse-3c6b-warehouse-data`
-6. Pub/Sub → Subscriptions
-7. Cloud Run → `warehouse-dispatch`
-8. Firestore → `warehouse` database
-9. SQL → the `warehouse-…` instance
-10. Managed Service for Apache Kafka → `warehouse`
-11. Dataproc → `warehouse-analytics` → Web Interfaces. Run `./scripts/flink-ui.sh` to print the links.
-12. Logging → Logs Explorer
-13. Grafana at `http://localhost:3000`
+1. Kubernetes Engine → Clusters → `warehouse`
+2. Argo CD at `https://localhost:8443`
+3. GitHub → the repository → Actions
+4. Cloud Storage → `g18-warehouse-3c6b-warehouse-data`
+5. Pub/Sub → Subscriptions
+6. Cloud Run → `warehouse-dispatch`
+7. Firestore → `warehouse` database
+8. SQL → the `warehouse-…` instance
+9. Managed Service for Apache Kafka → `warehouse`
+10. Dataproc → `warehouse-analytics` → Web Interfaces. Run `./scripts/flink-ui.sh` to print the links.
+11. Logging → Logs Explorer
+12. Grafana at `http://localhost:3000`
 
 **Final checks:**
 
@@ -132,19 +131,7 @@ Explain the two stacks. `bootstrap` holds the long-lived pieces: state bucket, r
 | **IAM & Admin → Workload Identity Federation** | The GitHub pool. CI signs in with no stored secret. |
 | **Cloud Storage → `g18-warehouse-3c6b-tfstate`** | The Terraform state, under `runtime/` |
 
-### Spending is capped (part of a)
-
-| Page | Point at |
-|---|---|
-| **Billing → Overview** and **Credits** | Credit remaining, and its end date |
-| **Billing → Budgets & alerts** | The ₹22,000 budget across the whole billing account, counted before credits |
-| **Cloud Run → `billing-kill-switch`** | The function that unlinks billing when the budget is reached |
-
-```bash
-make killswitch-check        # a self-test, which never turns billing off
-```
-
-A minute later, open **Cloud Run → billing-kill-switch → Logs**. It shows `can_unlink_billing: true`.
+Only if asked about cost: the project also has a budget and a billing kill switch (`infra/bootstrap/budget.tf`) that protect the group's free credit. No requirement asks for them, so they are not part of the demo.
 
 ### (d) GitOps
 
@@ -360,4 +347,3 @@ These go into `docs/evidence/`:
 - [ ] Grafana ZooKeeper, during `kill-zookeeper`
 - [ ] Grafana Central Logs, or Logs Explorer, following one `order_id`
 - [ ] The Flink dashboard: job graph and checkpoints
-- [ ] Billing: the budget, and the credit remaining

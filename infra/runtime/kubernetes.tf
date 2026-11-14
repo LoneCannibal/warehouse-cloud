@@ -73,6 +73,24 @@ resource "helm_release" "argocd" {
       params = {
         "server.insecure" = true
       }
+      cm = {
+        # Argo CD does not assess an Application's health by default, so the sync
+        # waves in the root app would set only the order the children are created in,
+        # never wait for one to be ready. This is the check Argo CD's documentation
+        # gives for app-of-apps. It makes the operator wait for its CRDs.
+        "resource.customizations.health.argoproj.io_Application" = <<-EOT
+          hs = {}
+          hs.status = "Progressing"
+          hs.message = ""
+          if obj.status ~= nil and obj.status.health ~= nil then
+            hs.status = obj.status.health.status
+            if obj.status.health.message ~= nil then
+              hs.message = obj.status.health.message
+            end
+          end
+          return hs
+        EOT
+      }
     }
     # Small requests, because the whole system shares six vCPUs.
     controller     = { resources = { requests = { cpu = "100m", memory = "256Mi" } } }
