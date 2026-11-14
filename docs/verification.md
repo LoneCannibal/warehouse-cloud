@@ -31,7 +31,7 @@ Project `g18-warehouse-3c6b` in `asia-south1`, on the group's credit. Evidence f
 
 ### Bugs the live deployment found
 
-All are fixed and committed. None could show up locally or against mocks.
+All are fixed and committed. None could show up locally or against mocks. The last was found on a later bring-up.
 
 | Bug | How it showed up | Fix |
 |---|---|---|
@@ -43,6 +43,7 @@ All are fixed and committed. None could show up locally or against mocks.
 | A plan wanted to rebuild Dataproc | Google adds three default scopes to the cluster's service account | The configuration lists them, as Google stores them |
 | A plan wanted to change GKE | The temporary default pool's settings read back as the worker pool's | Terraform ignores them after creation |
 | `make up` stopped on a rate limit | Creating 11 service accounts at once exceeded Google's per-minute limit | The accounts are created once in `infra/bootstrap`; `make up` only looks them up |
+| Prometheus never started on one bring-up (14 November) | The Prometheus Operator started before Kubernetes had registered its CRDs, logged them as not installed, and switched off its Prometheus controller for good. Earlier runs had won the race | The CRDs come from their own Argo CD Application, `monitoring-crds`, in an earlier sync wave, and Argo CD now assesses Application health so the waves wait (its log shows the root waiting for `monitoring-crds`). `make up` also restarts the operator if Prometheus has not appeared |
 
 Two lessons that are not bugs: a dropped network connection interrupted the first `make up`, because Terraform does not retry a failed DNS lookup, so run it on a stable network; and offering 35 orders a second is more than this stack completes, so a backlog builds and drains after the load stops.
 
