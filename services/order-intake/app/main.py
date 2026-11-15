@@ -1,4 +1,5 @@
-"""Order Intake Service: the public REST entry point for fulfilment orders.
+"""Order Intake Service: the public REST entry point for fulfilment orders, and the
+home of the Warehouse Console page at "/".
 
 An order is accepted once its stock is reserved over gRPC. It is then stored and
 published to Kafka, where the Job Scheduler picks it up asynchronously.
@@ -13,6 +14,7 @@ from pathlib import Path
 import grpc
 import httpx
 from fastapi import Header, HTTPException, Response
+from fastapi.responses import FileResponse
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
@@ -60,6 +62,15 @@ async def lifespan(_app):
 
 
 app = create_app(settings.service, lifespan)
+
+# The Warehouse Console: one self-contained page that drives the public API. The load
+# balancer routes exactly "/" here, so /health, /metrics and /docs stay private.
+CONSOLE = Path(__file__).with_name("static") / "index.html"
+
+
+@app.get("/", include_in_schema=False)
+def console() -> FileResponse:
+    return FileResponse(CONSOLE, media_type="text/html", headers={"Cache-Control": "no-cache"})
 
 
 def _find_by_key(key: str) -> dict | None:

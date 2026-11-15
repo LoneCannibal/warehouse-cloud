@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warehouse Console</title>
+<style>
+/* Layout: a header bar, then a three-column grid (order entry | order tracking | live
+   floor), with the Flink analytics table across the bottom. One column on a phone. */
+:root {
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  --bg: #eef1f5; --panel: #ffffff; --fg: #18212d; --muted: #5a6677; --line: #d5dbe4;
+  --soft: #f4f6f9; --accent: #1d5fd1; --accent-fg: #ffffff;
+  --ok: #17803d; --ok-soft: #dff3e6; --warn: #a15c00; --warn-soft: #fbecd2;
+  --bad: #c0352b; --bad-soft: #fbe2df; --info: #1d5fd1; --info-soft: #e1ebfb;
+  --pack: #7a3fc2; --pack-soft: #efe5fa;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141b; --panel: #171e28; --fg: #e4e9f0; --muted: #98a4b4; --line: #2b3542;
+    --soft: #1d2531; --accent: #5b94f0; --accent-fg: #0b1220;
+    --ok: #4cc27a; --ok-soft: #173826; --warn: #e8a54a; --warn-soft: #3a2a12;
+    --bad: #f0786d; --bad-soft: #3d1c1a; --info: #7aa9f5; --info-soft: #172a47;
+    --pack: #b994f2; --pack-soft: #2c2140;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+
+header { background: var(--panel); border-bottom: 1px solid var(--line); }
+.bar { max-width: 1440px; margin: 0 auto; padding: 14px 20px; display: flex; flex-wrap: wrap;
+  gap: 8px 24px; align-items: center; justify-content: space-between; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); font-size: 13px; }
+.health { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+
+main { max-width: 1440px; margin: 0 auto; padding: 20px; display: grid; gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-areas: "order orders workers" "stock orders burst" "analytics analytics analytics"; }
+#p-order { grid-area: order; } #p-orders { grid-area: orders; } #p-workers { grid-area: workers; }
+#p-stock { grid-area: stock; } #p-burst { grid-area: burst; } #p-analytics { grid-area: analytics; }
+@media (max-width: 1100px) {
+  main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "order orders" "stock orders" "workers burst" "analytics analytics"; }
+}
+@media (max-width: 720px) {
+  main { padding: 12px; grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "order" "orders" "stock" "workers" "burst" "analytics"; }
+}
+
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px; min-width: 0; align-self: start; }
+.panel h2 { font-size: 15px; margin: 0 0 2px; }
+.panel .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+input, select { font: inherit; color: var(--fg); background: var(--soft); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row { display: grid; gap: 8px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); margin-bottom: 10px; }
+.line, .line-head { display: grid; gap: 6px; grid-template-columns: 58px 64px minmax(0, 1fr) 70px 30px;
+  align-items: center; margin-bottom: 6px; }
+.line-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.line .code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button { font: inherit; font-weight: 500; border-radius: 6px; padding: 7px 12px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--soft); color: var(--fg); }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+button.icon { padding: 4px 0; width: 30px; color: var(--muted); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.note { margin-top: 10px; font-size: 13px; padding: 8px 10px; border-radius: 6px; }
+.note.ok { background: var(--ok-soft); color: var(--ok); }
+.note.bad { background: var(--bad-soft); color: var(--bad); }
+.note:empty { display: none; }
+
+.pill { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: .03em; padding: 2px 8px;
+  border-radius: 999px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+.pill.ACCEPTED { background: var(--soft); color: var(--muted); }
+.pill.PICKING { background: var(--info-soft); color: var(--info); }
+.pill.PACKING, .pill.PACKED { background: var(--pack-soft); color: var(--pack); }
+.pill.DISPATCHED { background: var(--ok-soft); color: var(--ok); }
+.pill.UNKNOWN { background: var(--bad-soft); color: var(--bad); }
+
+.track { display: flex; gap: 8px; margin-bottom: 12px; }
+.orders { display: grid; gap: 10px; }
+.order { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.order .top { display: flex; gap: 10px; align-items: center; }
+.order .id { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order .top .icon { margin-left: auto; flex: none; }
+.order .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 10px 0 8px; }
+.step { font-size: 11.5px; color: var(--muted); }
+.step::before { content: ""; display: block; height: 5px; border-radius: 3px; background: var(--line); margin-bottom: 4px; }
+.step.done::before { background: var(--ok); } .step.now::before { background: var(--info); }
+.step.done, .step.now { color: var(--fg); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+th { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; }
+.tasks td { font-size: 12.5px; padding: 3px 6px; }
+.attempt { font-size: 11.5px; font-weight: 600; color: var(--warn); background: var(--warn-soft);
+  padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.empty { color: var(--muted); font-size: 13px; padding: 14px 0; text-align: center; }
+.scroll { overflow-x: auto; }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.tabs button { padding: 4px 12px; }
+.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+#stock-body tr { cursor: pointer; }
+#stock-body tr:hover td { background: var(--soft); }
+
+.counts { display: flex; gap: 16px; margin-bottom: 10px; }
+.count b { display: block; font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.count span { font-size: 12px; color: var(--muted); }
+.workers { display: grid; gap: 6px; }
+.worker { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 6px; transition: background .4s; }
+.worker .kind { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  width: 58px; flex: none; }
+.worker .kind.picking { color: var(--info); } .worker .kind.packing { color: var(--pack); }
+.worker .who { flex: 1 1 auto; min-width: 0; }
+.worker .name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.worker .where { display: block; font-size: 12px; color: var(--muted); }
+.worker .tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+.worker.joined { background: var(--ok-soft); } .worker.joined .tag { color: var(--ok); }
+.worker.left { opacity: .6; background: var(--bad-soft); } .worker.left .tag { color: var(--bad); }
+.worker.left .name { text-decoration: line-through; }
+
+.progress { height: 8px; border-radius: 4px; background: var(--soft); border: 1px solid var(--line);
+  overflow: hidden; margin: 10px 0 6px; }
+.progress div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.burst-stats { display: flex; gap: 16px; font-size: 13px; }
+
+.window-meta { font-size: 12.5px; color: var(--muted); }
+.stale { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div>
+      <h1>Warehouse Console</h1>
+      <div class="sub">Smart Warehouse · picking, packing and dispatch · Group 18</div>
+    </div>
+    <div class="health" aria-live="polite"><span class="dot" id="api-dot"></span><span id="api-text">Connecting…</span></div>
+  </div>
+</header>
+
+<main>
+  <section class="panel" id="p-order" aria-labelledby="h-order">
+    <h2 id="h-order">New order</h2>
+    <p class="hint">Order Intake reserves the stock over gRPC, then publishes the order to Kafka.</p>
+    <form id="order-form" novalidate>
+      <div class="row">
+        <div><label for="customer">Customer</label><input id="customer" maxlength="100" value="demo customer" required></div>
+        <div><label for="priority">Priority</label>
+          <select id="priority">
+            <option value="0">0 (normal)</option><option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            <option value="6">6</option><option value="7">7</option><option value="8">8</option>
+            <option value="9">9 (first)</option>
+          </select></div>
+      </div>
+      <div class="line-head" aria-hidden="true"><span>Zone</span><span>No.</span><span>Product</span><span>Quantity</span><span></span></div>
+      <div id="lines"></div>
+      <div class="actions">
+        <button type="button" id="add-line">Add item</button>
+        <button type="button" id="random-order">Random order</button>
+        <button type="submit" class="primary" id="submit-order">Place order</button>
+      </div>
+      <div class="note" id="order-note" role="status"></div>
+    </form>
+  </section>
+
+  <section class="panel" id="p-orders" aria-labelledby="h-orders">
+    <div class="head"><h2 id="h-orders">Orders</h2><button type="button" id="clear-done">Clear dispatched</button></div>
+    <p class="hint">Live progress of the orders placed here. Each pick and pack task shows the worker that did it; attempt 2 or more means a task was reclaimed after a worker failed.</p>
+    <form class="track" id="track-form">
+      <input id="track-id" class="mono" placeholder="Track an order ID, e.g. ord-1a2b3c4d5e6f7a8b" aria-label="Order ID to track">
+      <button type="submit">Track</button>
+    </form>
+    <div class="orders" id="orders"></div>
+  </section>
+
+  <section class="panel" id="p-stock" aria-labelledby="h-stock">
+    <h2 id="h-stock">Stock</h2>
+    <p class="hint">Inventory in Cloud SQL. Click a product to add it to the order.</p>
+    <div class="tabs" role="group" aria-label="Zone">
+      <button type="button" data-zone="A" aria-pressed="true">Zone A</button>
+      <button type="button" data-zone="B" aria-pressed="false">Zone B</button>
+      <button type="button" data-zone="C" aria-pressed="false">Zone C</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Product</th><th>Bin</th><th class="r">On hand</th><th class="r">Reserved</th><th class="r" title="Units picked since this page opened">Picked</th></tr></thead>
+        <tbody id="stock-body"><tr><td colspan="5" class="empty">Loading stock…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="p-workers" aria-labelledby="h-workers">
+    <h2 id="h-workers">Workers</h2>
+    <p class="hint">Picking and Packing pods registered in ZooKeeper. New pods appear when the autoscaler adds them; a killed pod disappears.</p>
+    <div class="counts">
+      <div class="count"><b id="n-pickers">–</b><span>pickers</span></div>
+      <div class="count"><b id="n-packers">–</b><span>packers</span></div>
+      <div class="count"><b id="n-slots">–</b><span>worker slots</span></div>
+    </div>
+    <div class="workers" id="workers"></div>
+  </section>
+
+  <section class="panel" id="p-burst" aria-labelledby="h-burst">
+    <h2 id="h-burst">Load burst</h2>
+    <p class="hint">Sends random orders at a steady rate, like a small load test. Watch the workers and analytics respond.</p>
+    <div class="row">
+      <div><label for="burst-count">Orders (max 300)</label><input id="burst-count" type="number" min="1" max="300" value="50"></div>
+      <div><label for="burst-rate">Per second (max 20)</label><input id="burst-rate" type="number" min="1" max="20" value="5"></div>
+    </div>
+    <div class="actions"><button type="button" class="primary" id="burst-start">Start burst</button><button type="button" id="burst-stop" disabled>Stop</button></div>
+    <div class="progress" aria-hidden="true"><div id="burst-bar"></div></div>
+    <div class="burst-stats num"><span>Sent <b id="burst-sent">0</b></span><span>Accepted <b id="burst-ok">0</b></span><span>Refused <b id="burst-bad">0</b></span></div>
+    <div class="note" id="burst-note" role="status"></div>
+  </section>
+
+  <section class="panel" id="p-analytics" aria-labelledby="h-analytics">
+    <div class="head"><h2 id="h-analytics">Analytics</h2><span class="window-meta" id="window-meta"></span></div>
+    <p class="hint">Flink on Dataproc counts task events in 1-minute windows per zone and publishes them to a Kafka results topic; this is the latest window for each zone.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Zone</th><th class="r">Tasks created</th><th class="r">Picks</th><th class="r">Packs</th><th class="r">Dispatched</th>
+          <th class="r">Abandoned</th><th class="r">Reclaimed</th><th class="r">Active workers</th><th class="r">Queue depth</th><th class="r">Mean recovery</th><th>Window</th></tr></thead>
+        <tbody id="analytics-body"><tr><td colspan="11" class="empty">Loading analytics…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// Every request uses a relative URL, so the page works behind the load balancer and
+// locally alike. These are the only routes the public load balancer exposes.
+const API = { orders: "/v1/orders", workers: "/v1/workers", analytics: "/v1/analytics/latest", stock: "/v1/stock" };
+const ZONES = ["A", "B", "C"];
+const ZONE_NAMES = { A: "A · picking", B: "B · picking", C: "C · picking", P: "P · packing", D: "D · dispatch" };
+const STEPS = ["ACCEPTED", "PICKING", "PACKING", "DISPATCHED"];
+const STORE_KEY = "warehouse-console-orders";
+const MAX_TRACKED = 30;
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------------------------ helpers
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) if (child != null) node.append(child);
+  return node;
+}
+const fmt = (n) => (n == null ? "–" : Number(n).toLocaleString());
+const shortWorker = (id) => (id ? id.replace(/^(picking|packing)-[a-z0-9]+-/, "$1 …") : "–");
+const sku = (zone, n) => `SKU-${zone}${String(n).padStart(3, "0")}`;
+const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+function ago(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} days ago`;
+}
+function clock(ms) { return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+
+let apiOk = null;
+function setApi(ok, message) {
+  if (ok === apiOk && ok) return;
+  apiOk = ok;
+  $("api-dot").className = "dot " + (ok ? "ok" : "bad");
+  $("api-text").textContent = ok ? "Connected to the warehouse API" : message || "Cannot reach the warehouse API";
+}
+
+async function api(path, options) {
+  let response;
+  try {
+    response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+  } catch (err) {
+    setApi(false, "Cannot reach the warehouse API. Check the network, then wait; this page retries.");
+    throw err;
+  }
+  let body = null;
+  try { body = await response.json(); } catch (_) { /* not JSON */ }
+  if (response.status >= 500) setApi(false, "The warehouse API is returning errors. This page keeps retrying.");
+  else setApi(true);
+  return { status: response.status, body };
+}
+
+function errorText(result) {
+  const detail = result.body && result.body.detail;
+  if (Array.isArray(detail)) return detail.map((d) => `${(d.loc || []).slice(1).join(" ")}: ${d.msg}`).join("; ");
+  if (result.status === 409) return `Not enough stock: ${detail || "the order was refused"}.`;
+  if (result.status === 503) return "Inventory is unavailable right now. Try again in a few seconds.";
+  return detail ? String(detail) : `The order was refused (HTTP ${result.status}).`;
+}
+
+// ------------------------------------------------------------------ new order
+function addLine(zone = "A", number = 1, quantity = 1) {
+  if ($("lines").children.length >= 10) return;
+  const zoneSel = el("select", { "aria-label": "Zone" });
+  for (const z of ZONES) zoneSel.append(el("option", { value: z, text: z }));
+  zoneSel.value = zone;
+  const product = el("input", { type: "number", min: "0", max: "99", value: String(number), "aria-label": "Product number, 0 to 99" });
+  const qty = el("input", { type: "number", min: "1", max: "1000", value: String(quantity), "aria-label": "Quantity" });
+  const remove = el("button", { type: "button", class: "icon", "aria-label": "Remove item", title: "Remove item", text: "×" });
+  const preview = el("span", { class: "mono muted code" });
+  const row = el("div", { class: "line" }, zoneSel, product, preview, qty, remove);
+  const update = () => { preview.textContent = sku(zoneSel.value, Math.min(99, Math.max(0, Number(product.value) || 0))); };
+  zoneSel.addEventListener("change", update);
+  product.addEventListener("input", update);
+  remove.addEventListener("click", () => { if ($("lines").children.length > 1) row.remove(); });
+  update();
+  $("lines").append(row);
+}
+
+function readLines() {
+  return [...$("lines").children].map((row) => {
+    const [zoneSel] = row.getElementsByTagName("select");
+    const [product, qty] = row.getElementsByTagName("input");
+    return { sku: sku(zoneSel.value, Math.min(99, Math.max(0, Number(product.value) || 0))), quantity: Number(qty.value) };
+  });
+}
+
+function randomLines() {
+  const zones = ZONES.filter(() => Math.random() < 0.6);
+  return (zones.length ? zones : ["A"]).map((z) => ({ zone: z, number: randInt(0, 99), quantity: randInt(1, 3) }));
+}
+
+function setRandomOrder() {
+  $("lines").replaceChildren();
+  for (const l of randomLines()) addLine(l.zone, l.number, l.quantity);
+}
+
+async function placeOrder(payload) {
+  return api(API.orders, { method: "POST", body: JSON.stringify(payload) });
+}
+
+$("add-line").addEventListener("click", () => addLine());
+$("random-order").addEventListener("click", setRandomOrder);
+$("order-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const note = $("order-note");
+  const customer = $("customer").value.trim();
+  const lines = readLines();
+  if (!customer) { note.className = "note bad"; note.textContent = "Enter a customer name."; return; }
+  if (lines.some((l) => !(l.quantity >= 1 && l.quantity <= 1000))) {
+    note.className = "note bad"; note.textContent = "Each quantity must be between 1 and 1000."; return;
+  }
+  $("submit-order").disabled = true;
+  note.className = "note"; note.textContent = "";
+  try {
+    const result = await placeOrder({ customer, priority: Number($("priority").value), lines });
+    if (result.status === 202 || result.status === 200) {
+      note.className = "note ok";
+      note.textContent = `Accepted as ${result.body.order_id}. Watch it move in Orders.`;
+      track(result.body.order_id, customer, true);
+    } else {
+      note.className = "note bad"; note.textContent = errorText(result);
+    }
+  } catch (_) {
+    note.className = "note bad"; note.textContent = "The order could not be sent. Check the connection and try again.";
+  } finally {
+    $("submit-order").disabled = false;
+  }
+});
+
+// ------------------------------------------------------------------ orders
+// Tracked orders: {id, customer, placedAt, placedHere, status, data, doneAt}
+let tracked = [];
+try { tracked = JSON.parse(localStorage.getItem(STORE_KEY) || "[]").slice(0, MAX_TRACKED); } catch (_) { tracked = []; }
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(tracked.map(({ id, customer, placedAt, placedHere, status, doneAt }) => ({ id, customer, placedAt, placedHere, status, doneAt })))); } catch (_) { /* storage may be blocked */ }
+}
+
+function track(id, customer, placedHere = false) {
+  id = id.trim();
+  if (!id) return;
+  if (!tracked.some((o) => o.id === id)) {
+    tracked.unshift({ id, customer: customer || "", placedAt: Date.now(), placedHere, status: "ACCEPTED", data: null, doneAt: null });
+    tracked = tracked.slice(0, MAX_TRACKED);
+    save();
+  }
+  renderOrders();
+  refreshOrder(tracked.find((o) => o.id === id));
+}
+
+function stepState(status, step) {
+  const order = { ACCEPTED: 0, PICKING: 1, PACKING: 2, PACKED: 2, DISPATCHED: 3 };
+  const at = order[status] ?? -1;
+  const idx = STEPS.indexOf(step);
+  if (status === "DISPATCHED" || idx < at) return "done";
+  return idx === at ? "now" : "";
+}
+
+function orderCard(o) {
+  const status = o.status || "ACCEPTED";
+  const label = status === "UNKNOWN" ? "NOT FOUND" : status;
+  const remove = el("button", { type: "button", class: "icon", "aria-label": `Stop tracking ${o.id}`, title: "Stop tracking", text: "×" });
+  remove.addEventListener("click", () => { tracked = tracked.filter((t) => t.id !== o.id); save(); renderOrders(); });
+  let timing = o.customer ? `${o.customer} · ` : "";
+  const created = o.data && o.data.created_at ? Date.parse(o.data.created_at) : null;
+  if (o.doneAt) timing += `dispatched ${((o.doneAt - o.placedAt) / 1000).toFixed(1)} s after it was placed`;
+  else if (o.placedHere) timing += `placed ${ago(o.placedAt)}`;
+  else if (created) timing += `created ${ago(created)}`;
+  else timing += "tracking";
+  const card = el("div", { class: "order" },
+    el("div", { class: "top" },
+      el("span", { class: "id mono", text: o.id }),
+      el("span", { class: `pill ${status}`, text: label }),
+      remove),
+    el("div", { class: "meta", text: timing }));
+  if (status === "UNKNOWN") {
+    card.append(el("div", { class: "muted", text: "No order with this ID." }));
+    return card;
+  }
+  const steps = el("div", { class: "steps" });
+  for (const s of STEPS) steps.append(el("div", { class: `step ${stepState(status, s)}`, text: s[0] + s.slice(1).toLowerCase() }));
+  card.append(steps);
+  const tasks = (o.data && o.data.fulfilment && o.data.fulfilment.tasks) || [];
+  if (tasks.length) {
+    const body = el("tbody");
+    for (const t of tasks) {
+      const attempt = t.attempt > 1 ? el("span", { class: "attempt", title: "Reclaimed after a worker failed", text: `attempt ${t.attempt}` }) : el("span", { class: "muted", text: String(t.attempt) });
+      body.append(el("tr", {},
+        el("td", { text: t.task_type }), el("td", { text: t.zone }), el("td", { text: t.status }),
+        el("td", { class: "mono", title: t.worker_id || "", text: shortWorker(t.worker_id) }), el("td", { class: "r" }, attempt)));
+    }
+    card.append(el("div", { class: "scroll" }, el("table", { class: "tasks" },
+      el("thead", {}, el("tr", {}, el("th", { text: "Task" }), el("th", { text: "Zone" }), el("th", { text: "Status" }), el("th", { text: "Worker" }), el("th", { class: "r", text: "Attempt" }))),
+      body)));
+  } else if (o.data) {
+    card.append(el("div", { class: "muted", text: "Waiting for the Job Scheduler to pick the order up from Kafka…" }));
+  }
+  return card;
+}
+
+function renderOrders() {
+  const list = $("orders");
+  if (!tracked.length) {
+    list.replaceChildren(el("div", { class: "empty", text: "No orders yet. Place one, or start a burst." }));
+    return;
+  }
+  list.replaceChildren(...tracked.map(orderCard));
+}
+
+async function refreshOrder(o) {
+  if (!o) return;
+  try {
+    const result = await api(`${API.orders}/${encodeURIComponent(o.id)}`);
+    if (result.status === 404) { o.status = "UNKNOWN"; }
+    else if (result.status === 200) {
+      o.data = result.body;
+      o.customer = o.customer || result.body.customer || "";
+      const status = (result.body.fulfilment && result.body.fulfilment.status) || "ACCEPTED";
+      // A dispatch time is shown only for orders placed here and seen before they finished.
+      if (status === "DISPATCHED" && o.placedHere && o.status !== "DISPATCHED" && !o.doneAt) o.doneAt = Date.now();
+      o.status = status;
+    }
+    save();
+    renderOrders();
+  } catch (_) { /* shown in the header */ }
+}
+
+async function pollOrders() {
+  const active = tracked.filter((o) => o.status !== "DISPATCHED" && o.status !== "UNKNOWN" || !o.data);
+  await Promise.all(active.slice(0, 12).map(refreshOrder));
+}
+
+$("track-form").addEventListener("submit", (event) => { event.preventDefault(); track($("track-id").value); $("track-id").value = ""; });
+$("clear-done").addEventListener("click", () => { tracked = tracked.filter((o) => o.status !== "DISPATCHED" && o.status !== "UNKNOWN"); save(); renderOrders(); });
+
+// ------------------------------------------------------------------ stock
+let stockZone = "A";
+const firstSeen = {}; // sku -> on_hand when this page first saw it
+async function refreshStock() {
+  try {
+    const result = await api(`${API.stock}?zone=${stockZone}&limit=12`);
+    if (result.status !== 200) {
+      $("stock-body").replaceChildren(el("tr", {}, el("td", { colspan: "5", class: "empty", text: "Stock is not available right now." })));
+      return;
+    }
+    const rows = result.body.items.map((item) => {
+      if (!(item.sku in firstSeen)) firstSeen[item.sku] = item.on_hand;
+      const picked = firstSeen[item.sku] - item.on_hand;
+      const row = el("tr", { title: `Add ${item.sku} to the order` },
+        el("td", { class: "mono", text: item.sku }), el("td", { class: "mono muted", text: item.bin }),
+        el("td", { class: "r num", text: fmt(item.on_hand) }), el("td", { class: "r num", text: fmt(item.reserved) }),
+        el("td", { class: "r num", text: picked > 0 ? fmt(picked) : "–" }));
+      row.addEventListener("click", () => addLine(item.zone, Number(item.sku.slice(-3)), 1));
+      return row;
+    });
+    $("stock-body").replaceChildren(...rows);
+  } catch (_) { /* shown in the header */ }
+}
+for (const button of document.querySelectorAll(".tabs button")) {
+  button.addEventListener("click", () => {
+    stockZone = button.dataset.zone;
+    for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-pressed", String(b === button));
+    refreshStock();
+  });
+}
+
+// ------------------------------------------------------------------ workers
+let knownWorkers = null;        // ids seen in the last refresh
+const changes = new Map();      // id -> {kind: "joined"|"left", at, worker}
+async function refreshWorkers() {
+  try {
+    const result = await api(API.workers);
+    if (result.status !== 200) return;
+    const workers = result.body.workers || [];
+    const ids = new Set(workers.map((w) => w.worker_id));
+    const now = Date.now();
+    if (knownWorkers) {
+      for (const w of workers) if (!knownWorkers.has(w.worker_id)) changes.set(w.worker_id, { kind: "joined", at: now, worker: w });
+      for (const [id, w] of knownWorkers) if (!ids.has(id)) changes.set(id, { kind: "left", at: now, worker: w });
+    }
+    knownWorkers = new Map(workers.map((w) => [w.worker_id, w]));
+    for (const [id, c] of changes) if (now - c.at > 20000) changes.delete(id);
+
+    $("n-pickers").textContent = workers.filter((w) => w.capability === "picking").length;
+    $("n-packers").textContent = workers.filter((w) => w.capability === "packing").length;
+    $("n-slots").textContent = workers.reduce((sum, w) => sum + (w.slots || 0), 0);
+
+    const shown = [...workers];
+    for (const [id, c] of changes) if (c.kind === "left" && !ids.has(id)) shown.push(c.worker);
+    shown.sort((a, b) => a.capability.localeCompare(b.capability) || a.worker_id.localeCompare(b.worker_id));
+    const items = shown.map((w) => {
+      const c = changes.get(w.worker_id);
+      const state = c && (c.kind === "left" ? !ids.has(w.worker_id) : true) ? c.kind : "";
+      return el("div", { class: `worker ${state}` },
+        el("span", { class: `kind ${w.capability}`, text: w.capability }),
+        el("span", { class: "who" },
+          el("span", { class: "name mono", title: w.worker_id, text: w.worker_id }),
+          el("span", { class: "where", text: `zones ${w.zones.join(" ")} · ${w.slots} slots` })),
+        state ? el("span", { class: "tag", text: state }) : null);
+    });
+    $("workers").replaceChildren(...(items.length ? items : [el("div", { class: "empty", text: "No workers registered." })]));
+  } catch (_) { /* shown in the header */ }
+}
+
+// ------------------------------------------------------------------ analytics
+async function refreshAnalytics() {
+  try {
+    const result = await api(API.analytics);
+    if (result.status !== 200) return;
+    const order = ["A", "B", "C", "P", "D"];
+    const windows = (result.body.windows || []).slice().sort((a, b) => order.indexOf(a.zone) - order.indexOf(b.zone));
+    if (!windows.length) {
+      $("analytics-body").replaceChildren(el("tr", {}, el("td", { colspan: "11", class: "empty", text: "No windows yet. Flink publishes one per zone each minute while orders flow." })));
+      $("window-meta").textContent = "";
+      return;
+    }
+    const newest = Math.max(...windows.map((w) => w.window_end));
+    const stale = Date.now() - newest > 5 * 60 * 1000;
+    $("window-meta").className = "window-meta" + (stale ? " stale" : "");
+    $("window-meta").textContent = stale
+      ? `Latest window ended ${ago(newest)}. New windows appear about a minute after orders flow.`
+      : `Latest window ended ${ago(newest)}`;
+    $("analytics-body").replaceChildren(...windows.map((w) => el("tr", {},
+      el("td", { text: ZONE_NAMES[w.zone] || w.zone }),
+      el("td", { class: "r num", text: fmt(w.tasks_created) }), el("td", { class: "r num", text: fmt(w.picks_completed) }),
+      el("td", { class: "r num", text: fmt(w.packs_completed) }), el("td", { class: "r num", text: fmt(w.dispatched) }),
+      el("td", { class: "r num", text: fmt(w.tasks_abandoned) }), el("td", { class: "r num", text: fmt(w.tasks_reclaimed) }),
+      el("td", { class: "r num", text: fmt(w.active_workers) }), el("td", { class: "r num", text: fmt(w.queue_depth) }),
+      el("td", { class: "r num", text: w.mean_recovery_ms ? `${(w.mean_recovery_ms / 1000).toFixed(1)} s` : "–" }),
+      el("td", { class: "muted num", text: `${clock(w.window_start)}–${clock(w.window_end)}` }))));
+  } catch (_) { /* shown in the header */ }
+}
+
+// ------------------------------------------------------------------ burst
+let burst = null;
+function burstUi(running) {
+  $("burst-start").disabled = running;
+  $("burst-stop").disabled = !running;
+  $("burst-count").disabled = running;
+  $("burst-rate").disabled = running;
+}
+function stopBurst(message) {
+  if (!burst) return;
+  clearInterval(burst.timer);
+  burst = null;
+  burstUi(false);
+  if (message) { $("burst-note").className = "note ok"; $("burst-note").textContent = message; }
+}
+$("burst-start").addEventListener("click", () => {
+  const total = Math.min(300, Math.max(1, Math.round(Number($("burst-count").value) || 0)));
+  const rate = Math.min(20, Math.max(1, Math.round(Number($("burst-rate").value) || 0)));
+  $("burst-count").value = total; $("burst-rate").value = rate;
+  burst = { total, sent: 0, ok: 0, bad: 0, tracked: 0, timer: null };
+  for (const id of ["burst-sent", "burst-ok", "burst-bad"]) $(id).textContent = "0";
+  $("burst-bar").style.width = "0";
+  $("burst-note").className = "note"; $("burst-note").textContent = "";
+  burstUi(true);
+  const b = burst;
+  b.timer = setInterval(async () => {
+    if (burst !== b) return;
+    if (b.sent >= b.total) { clearInterval(b.timer); return; }
+    b.sent += 1;
+    $("burst-sent").textContent = b.sent;
+    $("burst-bar").style.width = `${(100 * b.sent) / b.total}%`;
+    const lines = randomLines().map((l) => ({ sku: sku(l.zone, l.number), quantity: l.quantity }));
+    try {
+      const result = await placeOrder({ customer: "burst", priority: randInt(0, 2), lines });
+      if (result.status === 202 || result.status === 200) {
+        b.ok += 1;
+        if (b.tracked < 3) { b.tracked += 1; track(result.body.order_id, "burst", true); }
+      } else {
+        b.bad += 1;
+        $("burst-note").className = "note bad"; $("burst-note").textContent = errorText(result);
+      }
+    } catch (_) { b.bad += 1; }
+    $("burst-ok").textContent = b.ok; $("burst-bad").textContent = b.bad;
+    if (b.ok + b.bad >= b.total && burst === b) stopBurst(`Done: ${b.ok} of ${b.total} orders accepted.`);
+  }, 1000 / rate);
+});
+$("burst-stop").addEventListener("click", () => {
+  const b = burst;
+  stopBurst(b ? `Stopped after ${b.sent} orders.` : "");
+});
+
+// ------------------------------------------------------------------ start
+setRandomOrder();
+renderOrders();
+function every(ms, fn) { fn(); setInterval(() => { if (!document.hidden) fn(); }, ms); }
+every(2000, pollOrders);
+every(4000, refreshWorkers);
+every(5000, refreshStock);
+every(10000, refreshAnalytics);
+</script>
+</body>
+</html>

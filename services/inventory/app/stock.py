@@ -100,6 +100,16 @@ def confirm_pick(pool: ConnectionPool, task_id: str, lines: list[tuple[str, int]
             )
 
 
+def list_stock(pool: ConnectionPool, zone: str, limit: int) -> list[dict]:
+    """The first products in one zone, in SKU order. Used by the Warehouse Console."""
+    with pool.connection() as conn:
+        return conn.execute(
+            "SELECT sku, name, zone, bin, on_hand, reserved FROM inventory.stock"
+            " WHERE zone = %s ORDER BY sku LIMIT %s",
+            (zone, limit),
+        ).fetchall()
+
+
 def get_stock(pool: ConnectionPool, sku: str) -> dict | None:
     with pool.connection() as conn:
         return conn.execute(

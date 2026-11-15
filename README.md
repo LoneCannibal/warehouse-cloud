@@ -177,6 +177,8 @@ make up
 BASE_URL=http://<printed-address> make smoke
 ```
 
+Then open `http://<printed-address>/` in a browser. That is the **Warehouse Console**: place orders and watch each one move through picking, packing and dispatch, see the live workers and stock, read Flink's latest windows, and send a burst of orders. It is one page served by Order Intake, calling the same public API. To work on the page without Google Cloud, `make console` serves it with a fake API on `localhost:8099`.
+
 ### 9. Tear it down when you finish
 
 ```bash

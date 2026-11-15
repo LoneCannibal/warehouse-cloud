@@ -92,6 +92,8 @@ k6 run -e BASE_URL=$BASE_URL -e PEAK_RPS=25 -e RAMP=1m -e HOLD=30m load-tests/or
 
 **Diagram.** Show `docs/diagrams` or the design document's architecture figure. Name the 8 services and the three ways they talk: REST at the edge, gRPC between services, Kafka for events.
 
+**Warehouse Console:** open `$BASE_URL/` in the browser and keep it on screen throughout. Place an order with **Place order** and watch it go Accepted → Picking → Packing → Dispatched, with the worker for each task. The Workers, Stock and Analytics panels update by themselves.
+
 **Console → Kubernetes Engine → Workloads**, filtered to namespace `warehouse`. Every service, the three `zookeeper` pods and the three `job-scheduler` replicas show as OK.
 
 **Terminal:**
@@ -303,6 +305,8 @@ Keep the load running, with Grafana → ZooKeeper and Warehouse KPIs on screen.
 ```
 
 After each step, point at **Kubernetes Engine → Workloads**, where the pod restarts, and at Warehouse KPIs, where orders keep flowing and the abandoned and reclaimed counts rise together.
+
+On the **Warehouse Console**, start a **Load burst** before the drills. During `kill-picker` the killed pod is marked *left* in Workers and its replacement *joined*, and any order it was working on shows its task again as **attempt 2**. When the HPA scales out, new picking pods appear in Workers as *joined*.
 
 ---
 

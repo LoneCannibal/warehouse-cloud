@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Query
 
 from app import stock
 from warehouse_common import db, grpc_util
@@ -63,6 +63,13 @@ async def lifespan(_app):
 
 
 app = create_app(settings.service, lifespan)
+
+
+@app.get("/v1/stock")
+def list_stock(zone: str = Query(min_length=1, max_length=1), limit: int = Query(default=20, ge=1, le=100)) -> dict:
+    if zone not in stock.ZONES:
+        raise HTTPException(status_code=422, detail=f"zone must be one of {', '.join(stock.ZONES)}")
+    return {"zone": zone, "items": stock.list_stock(state["pool"], zone, limit)}
 
 
 @app.get("/v1/stock/{sku}")

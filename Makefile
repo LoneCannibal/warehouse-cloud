@@ -1,14 +1,15 @@
 PYTHON  ?= python3
 REGION  ?= asia-south1
-PY_SERVICES := libs/warehouse_common services/picking services/packing services/analytics-api services/dispatch-function
+PY_SERVICES := libs/warehouse_common services/order-intake services/inventory services/picking services/packing services/analytics-api services/dispatch-function
 
-.PHONY: help install proto dashboards diagrams design-pdf test test-unit test-integration test-flink test-terraform test-manifests \
+.PHONY: help install console proto dashboards diagrams design-pdf test test-unit test-integration test-flink test-terraform test-manifests \
         local-up local-down smoke load bootstrap backend killswitch-check flink-jar preflight up down
 
 help:
 	@echo "No Google Cloud needed:"
 	@echo "  make install           install Python packages into the active environment"
 	@echo "  make test              run every test that works without Google Cloud"
+	@echo "  make console           preview the Warehouse Console with a fake API, on :8099"
 	@echo "  make local-up          start the whole system in Docker Compose"
 	@echo "  make smoke             send one order through the system"
 	@echo "  make load              run the k6 load test"
@@ -23,6 +24,10 @@ help:
 
 install:
 	$(PYTHON) -m pip install -e 'libs/warehouse_common[dev]'
+
+# The Warehouse Console page with a fake API, for working on the page without the cloud.
+console:
+	$(PYTHON) scripts/console_dev.py
 
 proto:
 	PYTHON=$(PYTHON) ./scripts/gen_proto.sh

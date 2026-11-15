@@ -1,7 +1,9 @@
 # GKE's built-in Ingress controller turns this into an external Application Load
 # Balancer, whose address is the public URL the assignment asks for. Its health check
 # copies each pod's readiness probe, GET /health. Only these paths are exposed, so the
-# /chaos routes on the worker pods stay reachable from inside the cluster alone.
+# /chaos routes on the worker pods stay reachable from inside the cluster alone. A path
+# without "*" matches exactly: "/" serves the Warehouse Console page and nothing else,
+# so /health, /metrics and /docs stay private.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -12,6 +14,13 @@ spec:
   rules:
     - http:
         paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: order-intake
+                port:
+                  name: http
           - path: /v1/orders
             pathType: ImplementationSpecific
             backend:
@@ -38,5 +47,19 @@ spec:
             backend:
               service:
                 name: worker-registry
+                port:
+                  name: http
+          - path: /v1/stock
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: inventory
+                port:
+                  name: http
+          - path: /v1/stock/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: inventory
                 port:
                   name: http

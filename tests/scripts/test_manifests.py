@@ -105,7 +105,11 @@ def test_chaos_routes_are_not_public():
     paths = [rule["path"] for rule in rules]
     assert "/v1/orders" in paths
     assert not any("chaos" in path for path in paths)
-    assert "/" not in paths
+    # On GKE a path without "*" matches exactly, so "/" serves only the console page.
+    # A catch-all "/*" would also expose /chaos, /health and /metrics.
+    assert "/*" not in paths
+    root = [rule for rule in rules if rule["path"] == "/"]
+    assert all(rule["backend"]["service"]["name"] == "order-intake" for rule in root)
 
 
 def test_no_secret_value_is_committed():
