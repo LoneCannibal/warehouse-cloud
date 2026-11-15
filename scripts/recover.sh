@@ -26,6 +26,7 @@ REGION="${REGION:-asia-south1}"
 ZONE="${ZONE:-asia-south1-a}"
 STACK=infra/runtime
 OUT="${RECOVERED_IMPORTS:-$STACK/recovered_imports.tf}"
+BACKEND="${BACKEND_HCL:-$STACK/backend.hcl}" # written by make backend; Git ignores it
 WAIT_ROUNDS="${WAIT_ROUNDS:-160}" # 15 s each: Managed Kafka can take 30 minutes
 
 note() { printf '   %s\n' "$*"; }
@@ -34,7 +35,7 @@ note() { printf '   %s\n' "$*"; }
 
 clear_stale_lock() {
   local bucket lock who id
-  bucket=$(sed -n 's/^bucket *= *"\(.*\)"/\1/p' "$STACK/backend.hcl" 2>/dev/null || true)
+  bucket=$(sed -n 's/^bucket *= *"\(.*\)"/\1/p' "$BACKEND" 2>/dev/null || true)
   [ -n "$bucket" ] || return 0
   lock=$(gcloud storage cat "gs://$bucket/runtime/default.tflock" 2>/dev/null || true)
   [ -n "$lock" ] || return 0

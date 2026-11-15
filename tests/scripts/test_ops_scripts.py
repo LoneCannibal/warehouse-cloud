@@ -437,7 +437,10 @@ def stub_recover(sandbox: Sandbox, state=(), gcloud=None, kubectl=None, lock="",
 
 
 def run_recover(sandbox: Sandbox, out: Path, *args: str) -> subprocess.CompletedProcess:
-    return sandbox.run(["bash", "scripts/recover.sh", *args], RECOVERED_IMPORTS=str(out))
+    # The real backend.hcl is written by make backend and kept out of Git, so CI has none.
+    backend = sandbox.tmp_path / "backend.hcl"
+    backend.write_text('bucket = "demo-tfstate"\nprefix = "runtime"\n')
+    return sandbox.run(["bash", "scripts/recover.sh", *args], RECOVERED_IMPORTS=str(out), BACKEND_HCL=str(backend))
 
 
 def test_recover_does_nothing_after_a_clean_run(sandbox):
