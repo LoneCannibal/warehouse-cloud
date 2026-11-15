@@ -228,9 +228,9 @@ kubectl -n warehouse get pods,hpa
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 kubectl -n argocd port-forward svc/argocd-server 8443:80
 
-# Grafana on localhost:3000. User admin, password from:
-kubectl -n monitoring get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d
-kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+# Grafana has its own public address. User admin; the password is grafana_admin_password
+# in infra/runtime/terraform.tfvars, or a generated one if that is empty.
+make grafana
 
 # The YARN and Flink web UIs, through Dataproc's Component Gateway
 ./scripts/flink-ui.sh

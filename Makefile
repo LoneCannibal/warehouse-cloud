@@ -3,7 +3,7 @@ REGION  ?= asia-south1
 PY_SERVICES := libs/warehouse_common services/order-intake services/inventory services/picking services/packing services/analytics-api services/dispatch-function
 
 .PHONY: help install console proto dashboards diagrams design-pdf test test-unit test-integration test-flink test-terraform test-manifests \
-        local-up local-down smoke load bootstrap backend killswitch-check flink-jar preflight up down
+        local-up local-down smoke load bootstrap backend killswitch-check flink-jar preflight up down grafana
 
 help:
 	@echo "No Google Cloud needed:"
@@ -20,6 +20,7 @@ help:
 	@echo "  make flink-jar         build the Flink job and upload it"
 	@echo "  make preflight         check the project has the vCPUs the stack needs"
 	@echo "  make up                create everything billed by the hour"
+	@echo "  make grafana           print Grafana's public address and admin password"
 	@echo "  make down              destroy everything billed by the hour"
 
 install:
@@ -119,3 +120,9 @@ up:
 
 down:
 	./scripts/down.sh
+
+# Grafana's public address and admin password.
+grafana:
+	@echo "Grafana:  http://$$(kubectl -n monitoring get service monitoring-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
+	@echo "User:     admin"
+	@echo "Password: $$(terraform -chdir=infra/runtime output -raw grafana_admin_password)"

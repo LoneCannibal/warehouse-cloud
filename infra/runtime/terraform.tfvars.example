@@ -13,3 +13,7 @@ git_repo_url = "https://github.com/YOUR_GITHUB_USER/warehouse-cloud.git"
 
 # If Managed Kafka refuses a replication factor of 3 at minimum size:
 # kafka_replication_factor = 2
+
+# Grafana has a public address, user admin. Choose a password of 12 or more characters
+# to keep it the same on every `make up`; without one, Terraform generates one.
+# grafana_admin_password = ""

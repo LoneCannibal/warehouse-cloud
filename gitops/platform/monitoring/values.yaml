@@ -51,6 +51,18 @@ prometheus-node-exporter:
       memory: 32Mi
 
 grafana:
+  # Terraform creates this secret from grafana_admin_password in terraform.tfvars, so the
+  # password is the same on every `make up` and never passes through Git. Without it the
+  # chart would make a new random password each time Argo CD renders it.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  # A public address of its own, separate from the shop's: the Ingress can only send
+  # traffic to services in its own namespace. scripts/down.sh waits for this load
+  # balancer to go before destroying the network, or it would be left billing.
+  service:
+    type: LoadBalancer
   # Terraform creates this service account, tied through Workload Identity to a Google
   # account that may read Cloud Monitoring and Cloud Logging. No key file is involved.
   serviceAccount:

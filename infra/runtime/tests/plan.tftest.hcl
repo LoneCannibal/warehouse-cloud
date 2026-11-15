@@ -190,3 +190,26 @@ run "pods_get_google_identities_without_keys" {
     error_message = "Grafana's Kubernetes account must be allowed to act as its Google account."
   }
 }
+
+run "grafana_keeps_the_password_from_tfvars" {
+  command = plan
+
+  variables {
+    grafana_admin_password = "a-fixed-demo-password"
+  }
+
+  assert {
+    condition     = kubernetes_secret_v1.grafana_admin.data["admin-password"] == "a-fixed-demo-password"
+    error_message = "Grafana must use the password set in terraform.tfvars, so it stays the same on every make up."
+  }
+}
+
+run "grafana_refuses_a_short_password" {
+  command = plan
+
+  variables {
+    grafana_admin_password = "admin"
+  }
+
+  expect_failures = [var.grafana_admin_password]
+}

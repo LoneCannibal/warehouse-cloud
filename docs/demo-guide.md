@@ -23,7 +23,7 @@ This is the screen-by-screen plan for the live demo. Every requirement is shown 
 | Pub/Sub | Topic `warehouse-manifests`; push subscription `warehouse-dispatch`; dead-letter topic `warehouse-dispatch-dead-letter` and subscription `warehouse-dispatch-dead-letters` | Pub/Sub |
 | Functions | `warehouse-dispatch` (Dispatch service), `billing-kill-switch` | Cloud Run |
 | Images | Repository `warehouse` | Artifact Registry |
-| Grafana dashboards | Service RED, Cluster Health, ZooKeeper, Warehouse KPIs, Central Logs | Grafana, through a port-forward |
+| Grafana dashboards | Service RED, Cluster Health, ZooKeeper, Warehouse KPIs, Central Logs | Grafana, on its own public address (`make grafana`) |
 
 ## T−75 min: bring it up
 
@@ -47,7 +47,7 @@ If `make up` stops on a DNS error or a 429, run `make up` again. Terraform picks
 | Tab | Runs |
 |---|---|
 | 1 | Argo CD port-forward (below) |
-| 2 | Grafana port-forward (below) |
+| 2 | `make grafana`, for its address and password (below) |
 | 3 | k6 |
 | 4 | `kubectl -n warehouse get hpa -w` |
 | 5 | Commands typed live |
@@ -57,9 +57,9 @@ If `make up` stops on a DNS error or a 429, run `make up` again. Terraform picks
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 kubectl -n argocd port-forward svc/argocd-server 8443:80
 
-# Tab 2: Grafana on http://localhost:3000. User admin, password:
-kubectl -n monitoring get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
-kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+# Tab 2: Grafana's public address, user admin, and the password from terraform.tfvars.
+# The same on every make up, so it can be written down before the demo.
+make grafana
 
 # Tab 3: background load, so the dashboards have data when you get to them
 k6 run -e BASE_URL=$BASE_URL -e PEAK_RPS=25 -e RAMP=1m -e HOLD=30m load-tests/orders.js
@@ -78,7 +78,7 @@ k6 run -e BASE_URL=$BASE_URL -e PEAK_RPS=25 -e RAMP=1m -e HOLD=30m load-tests/or
 9. Managed Service for Apache Kafka → `warehouse`
 10. Dataproc → `warehouse-analytics` → Web Interfaces. Run `./scripts/flink-ui.sh` to print the links.
 11. Logging → Logs Explorer
-12. Grafana at `http://localhost:3000`
+12. Grafana at the address `make grafana` printed
 
 **Final checks:**
 

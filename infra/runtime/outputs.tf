@@ -42,3 +42,9 @@ output "planned_vcpus" {
   description = "Compute Engine vCPUs this stack runs at once."
   value       = local.planned_vcpus
 }
+
+output "grafana_admin_password" {
+  description = "Grafana's admin password: terraform.tfvars' value, or the generated one."
+  value       = local.grafana_admin_password
+  sensitive   = true
+}

@@ -45,6 +45,30 @@ resource "kubernetes_secret_v1" "database" {
   }
 }
 
+# Grafana is reachable from the internet, so it gets a password chosen here rather than
+# the chart's own. The chart makes a new random one each time it renders, which under
+# Argo CD means on every sync.
+resource "random_password" "grafana" {
+  length  = 20
+  special = false
+}
+
+locals {
+  grafana_admin_password = var.grafana_admin_password != "" ? var.grafana_admin_password : random_password.grafana.result
+}
+
+resource "kubernetes_secret_v1" "grafana_admin" {
+  metadata {
+    name      = "grafana-admin"
+    namespace = kubernetes_namespace_v1.this["monitoring"].metadata[0].name
+  }
+
+  data = {
+    admin-user     = "admin"
+    admin-password = local.grafana_admin_password
+  }
+}
+
 # Each names its Google service account from iam.tf, which is how the pod gets that
 # identity through Workload Identity.
 resource "kubernetes_service_account_v1" "workload" {
@@ -164,6 +188,7 @@ resource "helm_release" "root_application" {
     kubernetes_secret_v1.argocd_repository,
     kubernetes_config_map_v1.infra_outputs,
     kubernetes_secret_v1.database,
+    kubernetes_secret_v1.grafana_admin,
     kubernetes_service_account_v1.workload,
   ]
 }

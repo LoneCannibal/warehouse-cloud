@@ -96,3 +96,15 @@ variable "git_ssh_private_key" {
   default     = ""
   sensitive   = true
 }
+
+variable "grafana_admin_password" {
+  description = "Grafana's admin password. Set it in terraform.tfvars to keep it the same on every `make up`; left empty, Terraform generates one (see `make grafana`)."
+  type        = string
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition     = var.grafana_admin_password == "" || length(var.grafana_admin_password) >= 12
+    error_message = "Grafana is public, so its password needs at least 12 characters."
+  }
+}

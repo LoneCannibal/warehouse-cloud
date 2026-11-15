@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Destroys everything billed by the hour.
 #
-# Order matters. Kubernetes, not Terraform, created the load balancer and the
-# ZooKeeper disks. If Terraform went first, the leftover load balancer would block
+# Order matters. Kubernetes, not Terraform, created the load balancers and the
+# ZooKeeper disks. If Terraform went first, a leftover load balancer would block
 # deleting the network, and the disks would keep billing. Deleting the root
 # Application removes them, because every Application carries the Argo CD finalizer.
 set -euo pipefail
@@ -18,12 +18,16 @@ if gcloud container clusters describe "$CLUSTER" --zone "$ZONE" > /dev/null 2>&1
     echo "Removing everything Argo CD deployed..."
     kubectl -n argocd delete application root --timeout=15m
 
-    echo "Waiting for the load balancer and the disks to go..."
+    echo "Waiting for the load balancers and the disks to go..."
     for _ in $(seq 1 40); do
       # A failed poll must not stop the script, or everything would be left billing.
       INGRESSES=$(kubectl -n warehouse get ingress -o name 2>/dev/null | wc -l || true)
+      # Grafana's own load balancer. GKE keeps the Service until its load balancer is gone.
+      BALANCERS=$(kubectl get services --all-namespaces \
+        -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' \
+        2>/dev/null | grep -c . || true)
       VOLUMES=$(kubectl get pv -o name 2>/dev/null | wc -l || true)
-      if [ "$INGRESSES" -eq 0 ] && [ "$VOLUMES" -eq 0 ]; then
+      if [ "$INGRESSES" -eq 0 ] && [ "${BALANCERS:-0}" -eq 0 ] && [ "$VOLUMES" -eq 0 ]; then
         break
       fi
       sleep 15

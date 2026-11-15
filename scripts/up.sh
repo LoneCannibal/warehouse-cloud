@@ -56,6 +56,19 @@ if [ -z "${PROMETHEUS:-}" ]; then
   kubectl -n monitoring delete pod -l app=kube-prometheus-stack-operator || true
 fi
 
+# Grafana's own load balancer usually has its address by now.
+for _ in $(seq 1 20); do
+  GRAFANA=$(kubectl -n monitoring get service monitoring-grafana \
+    -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+  [ -n "$GRAFANA" ] && break
+  sleep 15
+done
+
 echo "Public URL: http://$ADDRESS"
 echo "The load balancer can take a few more minutes to pass its health checks."
 echo "Check it with: BASE_URL=http://$ADDRESS make smoke"
+if [ -n "${GRAFANA:-}" ]; then
+  echo "Grafana: http://$GRAFANA (user admin; make grafana prints the password)"
+else
+  echo "Grafana has no address yet. make grafana prints it when it does."
+fi

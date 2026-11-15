@@ -182,6 +182,30 @@ exit 0
     assert last_poll < sandbox.index_of("destroy")
 
 
+def test_down_waits_for_grafanas_load_balancer_too(sandbox):
+    stub_cloud(sandbox)
+    counter = sandbox.tmp_path / "polls"
+    counter.write_text("0")
+    # Grafana's Service lingers for two polls, while GKE removes its load balancer.
+    sandbox.stub(
+        "kubectl",
+        f"""
+if [[ "$*" == *"get services --all-namespaces"* ]]; then
+  n=$(cat "{counter}"); echo $((n + 1)) > "{counter}"
+  [ "$n" -lt 2 ] && echo monitoring-grafana
+fi
+exit 0
+""",
+    )
+
+    result = sandbox.run(["bash", "scripts/down.sh"])
+
+    assert result.returncode == 0, result.stderr
+    assert counter.read_text().strip() == "3"
+    last_poll = max(i for i, call in enumerate(sandbox.calls) if "get services" in call)
+    assert last_poll < sandbox.index_of("destroy")
+
+
 def test_down_still_destroys_when_the_cluster_is_already_gone(sandbox):
     stub_cloud(sandbox, cluster_exists=False)
     sandbox.stub("kubectl")
@@ -236,6 +260,7 @@ def test_up_prints_the_public_url(sandbox):
 
     assert result.returncode == 0, result.stderr
     assert "http://34.120.0.10" in result.stdout
+    assert "Grafana: http://34.120.0.10" in result.stdout
     assert sandbox.index_of("apply") < sandbox.index_of("get-credentials warehouse --zone asia-south1-a")
 
 
