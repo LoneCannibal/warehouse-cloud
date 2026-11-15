@@ -177,7 +177,13 @@ make up
 BASE_URL=http://<printed-address> make smoke
 ```
 
-Then open `http://<printed-address>/` in a browser. That is the **Warehouse Console**: place orders and watch each one move through picking, packing and dispatch, see the live workers and stock, read Flink's latest windows, and send a burst of orders. It is one page served by Order Intake, calling the same public API. To work on the page without Google Cloud, `make console` serves it with a fake API on `localhost:8099`.
+Then open `http://<printed-address>/` in a browser. That is the **web front end**, served by Order Intake, with three views:
+
+- **Shop**: 300 products in three departments, one per picking zone, with live stock and how many of each have been picked. Add them to a cart, choose a delivery speed (Standard, Express or Priority, which set the order's priority) and place the order.
+- **Your orders**: every order placed from that browser, tracked live through picking, packing and dispatch, with the warehouse tasks, workers and attempt numbers behind each one.
+- **Warehouse**: a map of the floor showing where each picker is working, the live workers with a history of pods joining and leaving, charts of Flink's last 30 windows, every recent order, and a load generator whose Rush hour setting makes the autoscaler add pickers.
+
+It uses only the public API. To work on the page without Google Cloud, `make console` serves it with a fake API on `localhost:8099`; the fake API never runs in the cloud.
 
 ### 9. Tear it down when you finish
 

@@ -7,7 +7,8 @@ without Google Cloud or the local stack.
 
 The fake API answers the same routes the public load balancer exposes, with the same
 response shapes. An order moves through ACCEPTED, PICKING, PACKING, PACKED and
-DISPATCHED over about six seconds, and now and then a pick is reclaimed as attempt 2.
+DISPATCHED over about eight seconds, now and then a pick is reclaimed as attempt 2,
+and the number of pickers rises and falls every few minutes like the autoscaler.
 Standard library only.
 """
 from __future__ import annotations
@@ -25,12 +26,16 @@ from urllib.parse import parse_qs, urlparse
 PAGE = Path(__file__).resolve().parents[1] / "services" / "order-intake" / "app" / "static" / "index.html"
 ZONES = ("A", "B", "C")
 SEED_ON_HAND = 1_000_000
+PICKER_IDS = ["k2x9q", "m7d4w", "r5t8z", "v3n6b", "h9c2x", "q4w7e"]
 
 lock = threading.Lock()
 orders: dict[str, dict] = {}
 picked: dict[str, int] = {}
 reserved: dict[str, int] = {}
 started = time.time()
+# Some history, so the charts have something to draw before any order is placed.
+rng = random.Random(7)
+history = {zone: [rng.randint(20, 60) for _ in range(30)] for zone in ZONES}
 
 
 def bin_for(sku: str) -> str:
@@ -38,64 +43,93 @@ def bin_for(sku: str) -> str:
     return f"{zone}-{n % 10:02d}-{n % 7:02d}"
 
 
+def pickers() -> list[str]:
+    # Two pickers, rising to four for one minute in every three, like a scale-out.
+    phase = int(time.time() - started) % 180
+    count = 4 if 60 <= phase < 120 else 2
+    return [f"picking-6f9c7d8b5d-{n}" for n in PICKER_IDS[:count]]
+
+
 def workers() -> list[dict]:
-    # One extra picker joins for half of every minute, like the autoscaler at work.
-    pickers = 2 + (1 if int(time.time() - started) % 60 >= 30 else 0)
-    names = ["k2x9q", "m7d4w", "r5t8z"][:pickers]
-    result = [{"worker_id": f"picking-6f9c7d8b5d-{n}", "capability": "picking", "zones": list(ZONES), "slots": 4} for n in names]
+    result = [{"worker_id": w, "capability": "picking", "zones": list(ZONES), "slots": 4} for w in pickers()]
     result += [{"worker_id": f"packing-7b4f6c9d8e-{n}", "capability": "packing", "zones": ["P"], "slots": 4} for n in ("h3j6v", "p8s2c")]
     return result
 
 
-def order_view(order: dict) -> dict:
+def tasks_of(order: dict) -> tuple[str, list[dict]]:
+    """The order's status and tasks at its current age."""
     age = time.time() - order["placed"]
-    pickers = [w["worker_id"] for w in workers() if w["capability"] == "picking"]
+    names = pickers()
     tasks = []
     for i, line in enumerate(order["lines"]):
-        status = "PENDING" if age < 0.8 else ("ASSIGNED" if age < 2.5 else "DONE")
-        attempt = 2 if order["reclaimed"] and i == 0 else 1
+        status = "PENDING" if age < 1.0 else ("ASSIGNED" if age < 4.0 else "DONE")
         tasks.append({
             "task_id": f"{order['order_id']}.PICK.{line['zone']}", "task_type": "PICK", "zone": line["zone"],
-            "status": status, "worker_id": None if status == "PENDING" else pickers[i % len(pickers)], "attempt": attempt,
+            "status": status, "worker_id": None if status == "PENDING" else names[(order["seed"] + i) % len(names)],
+            "attempt": 2 if order["reclaimed"] and i == 0 else 1, "bins": [line["bin"]],
         })
-    if age >= 2.5:
-        pack = "PENDING" if age < 3.0 else ("ASSIGNED" if age < 4.5 else "DONE")
+    if age >= 4.0:
+        pack = "PENDING" if age < 4.5 else ("ASSIGNED" if age < 6.5 else "DONE")
         tasks.append({
             "task_id": f"{order['order_id']}.PACK", "task_type": "PACK", "zone": "P", "status": pack,
             "worker_id": None if pack == "PENDING" else "packing-7b4f6c9d8e-h3j6v", "attempt": 1,
+            "bins": [line["bin"] for line in order["lines"]],
         })
-    if age >= 6:
-        status = "DISPATCHED"
-    elif age >= 4.5:
-        status = "PACKED"
-    elif age >= 2.5:
-        status = "PACKING"
-    elif age >= 0.8:
-        status = "PICKING"
-    else:
-        status = "ACCEPTED"
-    if age >= 2.5 and not order["confirmed"]:
+    if age >= 4.0 and not order["confirmed"]:
         with lock:
             order["confirmed"] = True
             for line in order["lines"]:
                 picked[line["sku"]] = picked.get(line["sku"], 0) + line["quantity"]
                 reserved[line["sku"]] = reserved.get(line["sku"], 0) - line["quantity"]
-    return {"order_id": order["order_id"], "status": status, "tasks": tasks}
+    status = ("DISPATCHED" if age >= 8 else "PACKED" if age >= 6.5 else "PACKING" if age >= 4.0
+              else "PICKING" if age >= 1.0 else "ACCEPTED")
+    return status, tasks
 
 
-def windows() -> list[dict]:
+def summary(order: dict) -> dict:
+    status, tasks = tasks_of(order)
+    return {
+        "order_id": order["order_id"], "status": status, "tasks_total": len(tasks),
+        "tasks_done": sum(t["status"] == "DONE" for t in tasks), "max_attempt": max(t["attempt"] for t in tasks),
+        "dispatched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(order["placed"] + 8)) if status == "DISPATCHED" else None,
+    }
+
+
+def public(order: dict) -> dict:
+    return {k: order[k] for k in ("order_id", "customer", "priority", "lines", "created_at")}
+
+
+def floor() -> dict:
+    tasks, waiting = [], {}
+    for order in list(orders.values()):
+        _, order_tasks = tasks_of(order)
+        for t in order_tasks:
+            if t["status"] == "ASSIGNED":
+                tasks.append({k: t[k] for k in ("task_id", "task_type", "zone", "worker_id", "attempt", "bins")} | {"order_id": order["order_id"]})
+            elif t["status"] == "PENDING":
+                waiting[t["task_type"]] = waiting.get(t["task_type"], 0) + 1
+    dispatched = sum(1 for o in orders.values() if time.time() - o["placed"] >= 8)
+    return {"tasks": tasks, "waiting": waiting, "orders": {"open": len(orders) - dispatched, "dispatched": dispatched}}
+
+
+def windows(zone: str, limit: int) -> list[dict]:
     now = int(time.time() // 60 * 60_000)
-    start, end = now - 60_000, now
-    recent = [o for o in orders.values() if o["placed"] * 1000 >= start - 60_000]
     result = []
-    for zone in (*ZONES, "P", "D"):
-        n = sum(1 for o in recent for line in o["lines"] if line["zone"] == zone) if zone in ZONES else len(recent)
+    for i in range(limit):
+        end = now - i * 60_000
+        start = end - 60_000
+        recent = [o for o in orders.values() if start <= o["placed"] * 1000 < end]
+        if zone in ZONES:
+            n = sum(1 for o in recent for line in o["lines"] if line["zone"] == zone) + (history[zone][i] if i < 30 else 0)
+        else:
+            n = len(recent) + (sum(history[z][i] for z in ZONES) // 2 if i < 30 else 0)
+        failures = 1 if (i % 7 == 3 and zone == "A") else 0
         result.append({
             "zone": zone, "window_start": start, "window_end": end, "tasks_created": n,
             "picks_completed": n if zone in ZONES else 0, "packs_completed": n if zone == "P" else 0,
-            "dispatched": n if zone == "D" else 0, "tasks_abandoned": 1 if zone == "A" and n else 0,
-            "tasks_reclaimed": 1 if zone == "A" and n else 0, "active_workers": 2 if zone != "D" else 0,
-            "queue_depth": 0, "mean_recovery_ms": 11200.0 if zone == "A" and n else 0.0,
+            "dispatched": n if zone == "D" else 0, "tasks_abandoned": failures, "tasks_reclaimed": failures,
+            "active_workers": (4 if i % 9 < 3 else 2) if zone != "D" else 0,
+            "queue_depth": max(0, n - 40) if zone in ZONES else 0, "mean_recovery_ms": 11200.0 if failures else 0.0,
         })
     return result
 
@@ -116,43 +150,62 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         path, query = url.path, parse_qs(url.query)
+
+        def arg(name: str, default: str = "") -> str:
+            return (query.get(name) or [default])[0]
+
         if path == "/":
             return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         if path == "/__demo":
-            # For screenshots: shows the console with some orders already tracked.
-            ids = json.dumps((query.get("ids") or [""])[0].split(","))
-            burst = int((query.get("burst") or ["0"])[0])
+            # For screenshots: opens the console on one view, with orders and a burst.
+            ids = json.dumps([i for i in arg("ids").split(",") if i])
+            view, burst = arg("view", "shop"), int(arg("burst", "0"))
             harness = f"""<!doctype html><meta charset=utf-8><style>html,body,iframe{{margin:0;border:0;width:100%;height:100%}}</style>
-<iframe id=f src="/"></iframe><script>
+<iframe id=f src="/#{view}"></iframe><script>
 f.onload = () => setTimeout(() => {{
-  const d = f.contentDocument;
-  for (const id of {ids}) if (id) {{ d.getElementById("track-id").value = id; d.getElementById("track-form").requestSubmit(); }}
-  d.getElementById("order-form").requestSubmit();
-  if ({burst}) {{ d.getElementById("burst-count").value = {burst}; d.getElementById("burst-rate").value = 10; d.getElementById("burst-start").click(); }}
+  const w = f.contentWindow;
+  for (const id of {ids}) w.consoleDemo.track(id);
+  if ({burst}) w.consoleDemo.burst({burst});
+  if ("{arg("cart")}") w.consoleDemo.fillCart();
 }}, 300);
 </script>"""
             return self.send(200, harness.encode(), "text/html; charset=utf-8")
         if path == "/v1/workers":
             return self.send(200, {"workers": workers()})
+        if path == "/v1/floor":
+            return self.send(200, floor())
         if path == "/v1/analytics/latest":
-            return self.send(200, {"windows": windows()})
+            return self.send(200, {"windows": [windows(z, 1)[0] for z in (*ZONES, "P", "D")]})
+        if path == "/v1/analytics/windows":
+            return self.send(200, {"zone": arg("zone"), "windows": windows(arg("zone"), min(200, int(arg("limit", "30"))))})
         if path == "/v1/stock":
-            zone = (query.get("zone") or [""])[0]
+            zone = arg("zone")
             if zone not in ZONES:
-                return self.send(422, {"detail": [{"loc": ["query", "zone"], "msg": "zone must be A, B or C"}]})
-            limit = min(100, max(1, int((query.get("limit") or ["20"])[0])))
+                return self.send(422, {"detail": "zone must be one of A, B, C"})
+            limit = min(100, max(1, int(arg("limit", "20"))))
             items = []
             for n in range(limit):
                 sku = f"SKU-{zone}{n:03d}"
+                base = (n * 37 + ord(zone)) % 900  # some sales history
                 items.append({"sku": sku, "name": f"Item {zone}{n:03d}", "zone": zone, "bin": bin_for(sku),
-                              "on_hand": SEED_ON_HAND - picked.get(sku, 0), "reserved": max(0, reserved.get(sku, 0))})
+                              "on_hand": SEED_ON_HAND - base - picked.get(sku, 0), "reserved": max(0, reserved.get(sku, 0)),
+                              "picked": base + picked.get(sku, 0)})
             return self.send(200, {"zone": zone, "items": items})
+        if path == "/v1/orders":
+            if arg("ids"):
+                wanted = [i for i in arg("ids").split(",") if i][:100]
+                chosen = [orders[i] for i in wanted if i in orders]
+            else:
+                chosen = sorted(orders.values(), key=lambda o: -o["placed"])[: int(arg("limit", "50"))]
+            chosen.sort(key=lambda o: -o["placed"])
+            return self.send(200, {"orders": [public(o) | {"fulfilment": summary(o)} for o in chosen]})
         if path.startswith("/v1/orders/"):
             order = orders.get(path.rsplit("/", 1)[-1])
             if order is None:
                 return self.send(404, {"detail": "unknown order"})
-            body = {k: order[k] for k in ("order_id", "customer", "priority", "lines", "created_at")}
-            body["fulfilment"] = order_view(order)
+            status, tasks = tasks_of(order)
+            body = public(order) | {"fulfilment": {"order_id": order["order_id"], "status": status,
+                                                    "tasks": [{k: t[k] for k in t if k != "bins"} for t in tasks]}}
             return self.send(200, body)
         return self.send(404, {"detail": "Not Found"})
 
@@ -177,6 +230,7 @@ f.onload = () => setTimeout(() => {{
                 "order_id": order_id, "customer": request["customer"], "priority": int(request.get("priority", 0)),
                 "lines": allocated, "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "placed": time.time(), "reclaimed": random.random() < 0.15, "confirmed": False,
+                "seed": random.randrange(1000),
             }
         return self.send(202, {"order_id": order_id, "status": "ACCEPTED"})
 

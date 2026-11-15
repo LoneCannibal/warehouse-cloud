@@ -3,278 +3,485 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Warehouse Console</title>
+<title>Smart Warehouse</title>
 <style>
-/* Layout: a header bar, then a three-column grid (order entry | order tracking | live
-   floor), with the Flink analytics table across the bottom. One column on a phone. */
+/* Layout: a storefront. A fixed header with search, navigation and the cart, then one
+   of three views: Shop (product grid), Your orders (tracking), Warehouse (operations). */
 :root {
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
-  --bg: #eef1f5; --panel: #ffffff; --fg: #18212d; --muted: #5a6677; --line: #d5dbe4;
-  --soft: #f4f6f9; --accent: #1d5fd1; --accent-fg: #ffffff;
-  --ok: #17803d; --ok-soft: #dff3e6; --warn: #a15c00; --warn-soft: #fbecd2;
-  --bad: #c0352b; --bad-soft: #fbe2df; --info: #1d5fd1; --info-soft: #e1ebfb;
-  --pack: #7a3fc2; --pack-soft: #efe5fa;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --bg: #eaedf1; --panel: #ffffff; --fg: #18202b; --muted: #5d6878; --line: #d7dce3; --soft: #f3f5f8;
+  --head: #142236; --head-2: #1d3150; --head-fg: #f2f5fa; --head-muted: #a9b6c8;
+  --cta: #f5a524; --cta-fg: #1f1400; --cta-2: #ef8a17;
+  --link: #1f63c9; --link-soft: #e3edfc;
+  --ok: #16833f; --ok-soft: #dcf2e4; --warn: #9a5b00; --warn-soft: #fbedd4;
+  --bad: #c2362c; --bad-soft: #fbe3e0; --pick: #1f63c9; --pick-soft: #e3edfc; --pack: #7a3fc2; --pack-soft: #efe6fa;
+  --zone-a: #2f6fd6; --zone-b: #d9822b; --zone-c: #2a9d6f; --shadow: 0 1px 2px rgba(16, 24, 40, .08);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f141b; --panel: #171e28; --fg: #e4e9f0; --muted: #98a4b4; --line: #2b3542;
-    --soft: #1d2531; --accent: #5b94f0; --accent-fg: #0b1220;
-    --ok: #4cc27a; --ok-soft: #173826; --warn: #e8a54a; --warn-soft: #3a2a12;
-    --bad: #f0786d; --bad-soft: #3d1c1a; --info: #7aa9f5; --info-soft: #172a47;
-    --pack: #b994f2; --pack-soft: #2c2140;
+    --bg: #0e131a; --panel: #161d27; --fg: #e4e9f0; --muted: #98a4b4; --line: #2a3441; --soft: #1c2430;
+    --head: #0a1220; --head-2: #13213a;
+    --link: #78a8f5; --link-soft: #172a47;
+    --ok: #4cc27a; --ok-soft: #163824; --warn: #e8a54a; --warn-soft: #3a2a12;
+    --bad: #f0786d; --bad-soft: #3d1c1a; --pick: #78a8f5; --pick-soft: #172a47; --pack: #b994f2; --pack-soft: #2c2140;
+    --zone-a: #5d93ec; --zone-b: #e8a057; --zone-c: #4cc296; --shadow: none;
     color-scheme: dark;
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
 .mono { font-family: var(--mono); font-size: 12.5px; }
 .num { font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+[hidden] { display: none !important; }
 
-header { background: var(--panel); border-bottom: 1px solid var(--line); }
-.bar { max-width: 1440px; margin: 0 auto; padding: 14px 20px; display: flex; flex-wrap: wrap;
-  gap: 8px 24px; align-items: center; justify-content: space-between; }
-h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-.sub { color: var(--muted); font-size: 13px; }
-.health { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
-.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
-
-main { max-width: 1440px; margin: 0 auto; padding: 20px; display: grid; gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
-  grid-template-areas: "order orders workers" "stock orders burst" "analytics analytics analytics"; }
-#p-order { grid-area: order; } #p-orders { grid-area: orders; } #p-workers { grid-area: workers; }
-#p-stock { grid-area: stock; } #p-burst { grid-area: burst; } #p-analytics { grid-area: analytics; }
-@media (max-width: 1100px) {
-  main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas: "order orders" "stock orders" "workers burst" "analytics analytics"; }
-}
+/* ---------------------------------------------------------------- header */
+header { position: sticky; top: 0; z-index: 20; background: var(--head); color: var(--head-fg); }
+.topbar { max-width: 1440px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 16px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; flex: none; }
+.brand svg { width: 30px; height: 30px; }
+.brand b { display: block; font-size: 17px; letter-spacing: -.01em; }
+.brand span { display: block; font-size: 11.5px; color: var(--head-muted); }
+.search { flex: 1 1 auto; display: flex; min-width: 0; max-width: 680px; }
+.search input { flex: 1; min-width: 0; border: 0; border-radius: 8px 0 0 8px; padding: 9px 12px; background: #fff; color: #18202b; }
+.search button { border: 0; border-radius: 0 8px 8px 0; background: var(--cta); color: var(--cta-fg); padding: 0 14px; font-weight: 600; }
+.who { font-size: 12px; color: var(--head-muted); flex: none; text-align: right; }
+.who button { display: block; background: none; border: 0; padding: 0; color: var(--head-fg); font-weight: 600; font-size: 13.5px; }
+.cart-btn { position: relative; flex: none; display: flex; align-items: center; gap: 6px; background: var(--head-2); border: 1px solid #2a4066;
+  color: var(--head-fg); border-radius: 8px; padding: 7px 12px; font-weight: 600; }
+.cart-btn .badge { background: var(--cta); color: var(--cta-fg); border-radius: 999px; min-width: 20px; padding: 0 6px; font-size: 12px; text-align: center; }
+nav.tabs { background: var(--head-2); }
+nav.tabs .in { max-width: 1440px; margin: 0 auto; padding: 0 20px; display: flex; gap: 4px; align-items: center; overflow-x: auto; }
+nav.tabs a { color: var(--head-fg); text-decoration: none; padding: 9px 12px; font-size: 13.5px; border-bottom: 3px solid transparent; white-space: nowrap; }
+nav.tabs a[aria-current="page"] { border-bottom-color: var(--cta); font-weight: 600; }
+nav.tabs a .count { background: rgba(255,255,255,.14); border-radius: 999px; padding: 0 7px; margin-left: 4px; font-size: 12px; }
+nav.tabs .health { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--head-muted); white-space: nowrap; padding-left: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--head-muted); flex: none; }
+.dot.ok { background: #4cc27a; } .dot.bad { background: #f0786d; }
 @media (max-width: 720px) {
-  main { padding: 12px; grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "order" "orders" "stock" "workers" "burst" "analytics"; }
+  .topbar { flex-wrap: wrap; padding: 10px 12px; gap: 10px; }
+  .search { order: 3; flex-basis: 100%; max-width: none; }
+  .who { margin-left: auto; }
+  .brand span { display: none; }
+  nav.tabs .in { padding: 0 8px; }
+  nav.tabs .health span:last-child { display: none; }
 }
 
-section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  padding: 16px; min-width: 0; align-self: start; }
-.panel h2 { font-size: 15px; margin: 0 0 2px; }
-.panel .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
-.head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-
-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-input, select { font: inherit; color: var(--fg); background: var(--soft); border: 1px solid var(--line);
-  border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
-input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.row { display: grid; gap: 8px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); margin-bottom: 10px; }
-.line, .line-head { display: grid; gap: 6px; grid-template-columns: 58px 64px minmax(0, 1fr) 70px 30px;
-  align-items: center; margin-bottom: 6px; }
-.line-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-.line .code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-button { font: inherit; font-weight: 500; border-radius: 6px; padding: 7px 12px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--soft); color: var(--fg); }
-button:hover { border-color: var(--muted); }
-button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-button.primary:hover { filter: brightness(1.08); }
-button.icon { padding: 4px 0; width: 30px; color: var(--muted); }
-button:disabled { opacity: .5; cursor: not-allowed; }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.note { margin-top: 10px; font-size: 13px; padding: 8px 10px; border-radius: 6px; }
-.note.ok { background: var(--ok-soft); color: var(--ok); }
-.note.bad { background: var(--bad-soft); color: var(--bad); }
-.note:empty { display: none; }
-
-.pill { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: .03em; padding: 2px 8px;
-  border-radius: 999px; background: var(--soft); color: var(--muted); white-space: nowrap; }
-.pill.ACCEPTED { background: var(--soft); color: var(--muted); }
-.pill.PICKING { background: var(--info-soft); color: var(--info); }
-.pill.PACKING, .pill.PACKED { background: var(--pack-soft); color: var(--pack); }
-.pill.DISPATCHED { background: var(--ok-soft); color: var(--ok); }
-.pill.UNKNOWN { background: var(--bad-soft); color: var(--bad); }
-
-.track { display: flex; gap: 8px; margin-bottom: 12px; }
-.orders { display: grid; gap: 10px; }
-.order { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
-.order .top { display: flex; gap: 10px; align-items: center; }
-.order .id { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.order .top .icon { margin-left: auto; flex: none; }
-.order .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
-.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 10px 0 8px; }
-.step { font-size: 11.5px; color: var(--muted); }
-.step::before { content: ""; display: block; height: 5px; border-radius: 3px; background: var(--line); margin-bottom: 4px; }
-.step.done::before { background: var(--ok); } .step.now::before { background: var(--info); }
-.step.done, .step.now { color: var(--fg); }
+main { max-width: 1440px; margin: 0 auto; padding: 18px 20px 40px; }
+@media (max-width: 720px) { main { padding: 12px 12px 32px; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); min-width: 0; }
+.pad { padding: 16px; }
+h2 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
+h3 { font-size: 15px; margin: 0; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 2px 0 0; }
+.btn { border-radius: 8px; padding: 8px 14px; font-weight: 600; border: 1px solid var(--line); background: var(--soft); }
+.btn:hover { border-color: var(--muted); }
+.btn.cta { background: var(--cta); border-color: var(--cta-2); color: var(--cta-fg); }
+.btn.cta:hover { background: var(--cta-2); }
+.btn.small { padding: 5px 10px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.pill { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.s-ACCEPTED { background: var(--soft); color: var(--muted); }
+.s-PICKING { background: var(--pick-soft); color: var(--pick); }
+.s-PACKING, .s-PACKED { background: var(--pack-soft); color: var(--pack); }
+.s-DISPATCHED { background: var(--ok-soft); color: var(--ok); }
+.s-UNKNOWN { background: var(--bad-soft); color: var(--bad); }
+.empty { color: var(--muted); text-align: center; padding: 28px 12px; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
-th { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-tr:last-child td { border-bottom: 0; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+th { font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; background: var(--panel); }
 td.r, th.r { text-align: right; }
-.tasks td { font-size: 12.5px; padding: 3px 6px; }
-.attempt { font-size: 11.5px; font-weight: 600; color: var(--warn); background: var(--warn-soft);
-  padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-.empty { color: var(--muted); font-size: 13px; padding: 14px 0; text-align: center; }
-.scroll { overflow-x: auto; }
+.scroll-x { overflow-x: auto; }
+.attempt { font-size: 11.5px; font-weight: 700; color: var(--warn); background: var(--warn-soft); padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
 
-.tabs { display: flex; gap: 6px; margin-bottom: 8px; }
-.tabs button { padding: 4px 12px; }
-.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-#stock-body tr { cursor: pointer; }
-#stock-body tr:hover td { background: var(--soft); }
+/* ---------------------------------------------------------------- shop */
+.shop { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; align-items: start; }
+.filters { position: sticky; top: 104px; }
+.filters h3 { margin-bottom: 8px; }
+.cat { display: flex; justify-content: space-between; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 7px 8px; }
+.cat:hover { background: var(--soft); }
+.cat[aria-pressed="true"] { background: var(--link-soft); color: var(--link); font-weight: 600; }
+.cat .n { color: var(--muted); font-size: 12px; }
+.cat small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; margin-left: 16px; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; }
+.filters .note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.toolbar select { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.product { display: flex; flex-direction: column; padding: 12px; gap: 6px; }
+.product .img { border-radius: 8px; aspect-ratio: 16 / 10; display: grid; place-items: center; max-width: 100%; }
+.product .img svg { width: 34%; height: auto; }
+.product .name { font-weight: 600; line-height: 1.3; min-height: 2.6em; }
+.product .meta { font-size: 12px; color: var(--muted); }
+.product .stock { font-size: 12.5px; color: var(--ok); font-weight: 600; }
+.product .sold { font-size: 12px; color: var(--muted); }
+.product .buy { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; margin-top: auto; padding-top: 6px; }
+.qty { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
+.qty button { border: 0; background: var(--soft); width: 24px; }
+.qty input { width: 34px; border: 0; text-align: center; background: var(--panel); -moz-appearance: textfield; }
+.qty input::-webkit-outer-spin-button, .qty input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.product .buy .btn { padding: 6px 8px; font-size: 13px; white-space: nowrap; }
+.more { display: flex; justify-content: center; margin-top: 16px; }
+@media (max-width: 900px) {
+  .shop { grid-template-columns: minmax(0, 1fr); }
+  .filters { position: static; }
+  .filters .cats { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cat { width: auto; gap: 8px; border: 1px solid var(--line); }
+  .filters .note { display: none; }
+}
+@media (max-width: 480px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .product { padding: 8px; }
+  .product .buy { grid-template-columns: minmax(0, 1fr); }
+  .product .buy .qty { justify-content: space-between; }
+  .product .buy .qty input { flex: 1; }
+}
 
-.counts { display: flex; gap: 16px; margin-bottom: 10px; }
-.count b { display: block; font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.count span { font-size: 12px; color: var(--muted); }
-.workers { display: grid; gap: 6px; }
-.worker { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line);
-  border-radius: 6px; transition: background .4s; }
-.worker .kind { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
-  width: 58px; flex: none; }
-.worker .kind.picking { color: var(--info); } .worker .kind.packing { color: var(--pack); }
-.worker .who { flex: 1 1 auto; min-width: 0; }
-.worker .name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.worker .where { display: block; font-size: 12px; color: var(--muted); }
-.worker .tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
-.worker.joined { background: var(--ok-soft); } .worker.joined .tag { color: var(--ok); }
-.worker.left { opacity: .6; background: var(--bad-soft); } .worker.left .tag { color: var(--bad); }
-.worker.left .name { text-decoration: line-through; }
+/* ---------------------------------------------------------------- cart drawer */
+.overlay { position: fixed; inset: 0; background: rgba(8, 14, 24, .45); z-index: 40; }
+aside.cart { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100%); z-index: 41; background: var(--panel);
+  display: flex; flex-direction: column; box-shadow: -8px 0 24px rgba(0,0,0,.18); }
+.cart-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.cart-body { flex: 1; overflow-y: auto; padding: 8px 16px; }
+.cart-line { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.cart-line .thumb { width: 44px; height: 44px; border-radius: 6px; display: grid; place-items: center; }
+.cart-line .thumb svg { width: 26px; }
+.cart-line .nm { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cart-line .row2 { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.link { background: none; border: 0; padding: 0; color: var(--link); font-size: 12.5px; }
+.cart-foot { border-top: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 10px; }
+.speeds { display: grid; gap: 6px; }
+.speed { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.speed:has(input:checked) { border-color: var(--link); background: var(--link-soft); }
+.speed b { display: block; font-size: 13.5px; } .speed span { font-size: 12px; color: var(--muted); }
+.field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.field input { width: 100%; border: 1px solid var(--line); background: var(--soft); border-radius: 8px; padding: 7px 9px; }
+.msg { font-size: 13px; padding: 8px 10px; border-radius: 8px; }
+.msg.bad { background: var(--bad-soft); color: var(--bad); }
+.msg:empty { display: none; }
 
-.progress { height: 8px; border-radius: 4px; background: var(--soft); border: 1px solid var(--line);
-  overflow: hidden; margin: 10px 0 6px; }
-.progress div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-.burst-stats { display: flex; gap: 16px; font-size: 13px; }
+/* ---------------------------------------------------------------- orders */
+.orders-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
+.track { display: flex; gap: 6px; }
+.track input { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 10px; width: min(300px, 60vw); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.chip { font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 2px 10px; }
+.order-list { display: grid; gap: 12px; max-height: calc(100vh - 230px); min-height: 220px; overflow-y: auto; padding-right: 4px; }
+.order { overflow: hidden; }
+.order .strip { display: flex; flex-wrap: wrap; gap: 6px 24px; background: var(--soft); border-bottom: 1px solid var(--line); padding: 9px 14px; font-size: 12px; color: var(--muted); }
+.order .strip b { display: block; color: var(--fg); font-size: 12.5px; font-weight: 600; }
+.order .strip .end { margin-left: auto; text-align: right; }
+.order .body { padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; }
+.order .state { font-size: 16px; font-weight: 700; }
+.order .state.DISPATCHED { color: var(--ok); }
+.tracker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 12px 0 10px; }
+.tstep { position: relative; text-align: center; font-size: 12px; color: var(--muted); padding-top: 22px; }
+.tstep::before { content: ""; position: absolute; top: 6px; left: 0; right: 0; height: 4px; background: var(--line); }
+.tstep:first-child::before { left: 50%; } .tstep:last-child::before { right: 50%; }
+.tstep::after { content: ""; position: absolute; top: 0; left: 50%; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--panel); border: 3px solid var(--line); box-sizing: border-box; }
+.tstep.done::before, .tstep.done::after { background: var(--ok); border-color: var(--ok); }
+.tstep.now::after { border-color: var(--pick); background: var(--pick-soft); }
+.tstep.done, .tstep.now { color: var(--fg); font-weight: 600; }
+.tstep small { display: block; font-weight: 400; color: var(--muted); }
+.items { font-size: 13px; display: grid; gap: 4px; }
+.items .it { display: flex; gap: 8px; align-items: center; }
+.items .it .thumb { width: 26px; height: 26px; border-radius: 5px; display: grid; place-items: center; flex: none; }
+.items .it .thumb svg { width: 16px; }
+.order .side { display: grid; gap: 8px; align-content: start; }
+.order details { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 8px; }
+.order summary { cursor: pointer; color: var(--link); font-size: 13px; }
+@media (max-width: 720px) {
+  .order .body { grid-template-columns: minmax(0, 1fr); }
+  .order-list { max-height: none; }
+}
 
-.window-meta { font-size: 12.5px; color: var(--muted); }
-.stale { color: var(--warn); }
+/* ---------------------------------------------------------------- warehouse */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.kpi { padding: 12px 14px; }
+.kpi b { display: block; font-size: 24px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12px; color: var(--muted); }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.wh { display: grid; gap: 14px; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); align-items: start; }
+.wh .full { grid-column: 1 / -1; }
+@media (max-width: 1100px) { .wh { grid-template-columns: minmax(0, 1fr); } }
+.sect-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.map { overflow-x: auto; }
+.map svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.map .cell { fill: var(--soft); stroke: var(--line); stroke-width: 1; }
+.map .cell.active { fill: var(--pick-soft); stroke: var(--pick); stroke-width: 1.5; }
+.map text { fill: var(--muted); font: 600 11px var(--sans); }
+.map .zl { font-size: 12.5px; fill: var(--fg); }
+.map .station { fill: var(--soft); stroke: var(--line); }
+.map .worker { transition: transform .9s ease-in-out; }
+.map .worker circle { stroke: var(--panel); stroke-width: 2; }
+.map .worker text { fill: #fff; font-size: 9px; text-anchor: middle; dominant-baseline: central; }
+.map .start { fill: none; stroke: var(--muted); stroke-dasharray: 3 3; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.counts { display: flex; gap: 18px; margin-bottom: 8px; }
+.counts div b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.counts div span { font-size: 12px; color: var(--muted); }
+.spark { width: 100%; height: 56px; display: block; margin: 4px 0 10px; }
+.wlist { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+.w { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 2px 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; }
+.w .k { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; grid-row: span 2; align-self: center; white-space: nowrap; }
+.w .k.picking { color: var(--pick); } .w .k.packing { color: var(--pack); }
+.w .id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w .st { color: var(--muted); font-size: 12px; }
+.w.joined { background: var(--ok-soft); }
+.log { max-height: 150px; overflow-y: auto; font-size: 12.5px; border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; display: grid; gap: 3px; }
+.log .j { color: var(--ok); } .log .l { color: var(--bad); }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart .axis { stroke: var(--line); } .chart .grid { stroke: var(--line); stroke-dasharray: 2 3; }
+.chart text { fill: var(--muted); font: 10.5px var(--sans); }
+.chart .keys { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.chart .keys i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.stale { color: var(--warn); font-size: 12.5px; }
+.all-orders { max-height: 380px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.all-orders th { position: sticky; top: 0; z-index: 1; }
+.bar { width: 80px; height: 6px; background: var(--soft); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
+.bar i { display: block; height: 100%; background: var(--ok); }
+.load { display: grid; gap: 10px; }
+.presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.preset { text-align: left; border: 1px solid var(--line); background: var(--soft); border-radius: 8px; padding: 9px 10px; }
+.preset b { display: block; } .preset span { font-size: 12px; color: var(--muted); }
+.preset:hover { border-color: var(--muted); }
+.custom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.progress { height: 8px; border-radius: 4px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--cta); transition: width .3s; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+
+/* ---------------------------------------------------------------- toast */
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; background: var(--head); color: var(--head-fg);
+  border-radius: 10px; padding: 10px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 13.5px; max-width: calc(100% - 32px); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <header>
-  <div class="bar">
-    <div>
-      <h1>Warehouse Console</h1>
-      <div class="sub">Smart Warehouse · picking, packing and dispatch · Group 18</div>
-    </div>
-    <div class="health" aria-live="polite"><span class="dot" id="api-dot"></span><span id="api-text">Connecting…</span></div>
+  <div class="topbar">
+    <a class="brand" href="#shop" aria-label="Smart Warehouse home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="9" width="28" height="20" rx="3" fill="#f5a524"/><path d="M2 12 16 3l14 9" fill="none" stroke="#f5a524" stroke-width="3" stroke-linejoin="round"/><rect x="8" y="16" width="7" height="13" fill="#142236"/><rect x="18" y="14" width="7" height="6" fill="#142236"/></svg>
+      <div><b>Smart Warehouse</b><span>Group 18 · picking, packing, dispatch</span></div>
+    </a>
+    <form class="search" id="search-form" role="search">
+      <input id="search" type="search" placeholder="Search 300 products by name or SKU" aria-label="Search products">
+      <button type="submit">Search</button>
+    </form>
+    <div class="who">Ordering as<button type="button" id="who-btn" title="Change your name"></button></div>
+    <button type="button" class="cart-btn" id="cart-open" aria-label="Open cart">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11h11.2L21 7H6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="9" cy="19.5" r="1.6" fill="currentColor"/><circle cx="17" cy="19.5" r="1.6" fill="currentColor"/></svg>
+      Cart <span class="badge" id="cart-count">0</span>
+    </button>
   </div>
+  <nav class="tabs" aria-label="Views">
+    <div class="in">
+      <a href="#shop" data-view="shop">Shop</a>
+      <a href="#orders" data-view="orders">Your orders <span class="count" id="orders-count">0</span></a>
+      <a href="#warehouse" data-view="warehouse">Warehouse</a>
+      <div class="health" aria-live="polite"><span class="dot" id="api-dot"></span><span id="api-text">Connecting…</span></div>
+    </div>
+  </nav>
 </header>
 
 <main>
-  <section class="panel" id="p-order" aria-labelledby="h-order">
-    <h2 id="h-order">New order</h2>
-    <p class="hint">Order Intake reserves the stock over gRPC, then publishes the order to Kafka.</p>
-    <form id="order-form" novalidate>
-      <div class="row">
-        <div><label for="customer">Customer</label><input id="customer" maxlength="100" value="demo customer" required></div>
-        <div><label for="priority">Priority</label>
-          <select id="priority">
-            <option value="0">0 (normal)</option><option value="1">1</option><option value="2">2</option>
-            <option value="3">3</option><option value="4">4</option><option value="5">5</option>
-            <option value="6">6</option><option value="7">7</option><option value="8">8</option>
-            <option value="9">9 (first)</option>
-          </select></div>
+  <!-- ========================================================= SHOP -->
+  <section id="view-shop" aria-label="Shop">
+    <div class="shop">
+      <div class="card pad filters">
+        <h3>Departments</h3>
+        <div class="cats" id="cats"></div>
+        <p class="note">Each department is one picking zone of the warehouse. Stock and the number picked come live from the Inventory service in Cloud SQL.</p>
       </div>
-      <div class="line-head" aria-hidden="true"><span>Zone</span><span>No.</span><span>Product</span><span>Quantity</span><span></span></div>
-      <div id="lines"></div>
-      <div class="actions">
-        <button type="button" id="add-line">Add item</button>
-        <button type="button" id="random-order">Random order</button>
-        <button type="submit" class="primary" id="submit-order">Place order</button>
+      <div>
+        <div class="toolbar">
+          <div><h2 id="shop-title">All departments</h2><p class="hint" id="shop-count">Loading products…</p></div>
+          <label>Sort by
+            <select id="sort">
+              <option value="popular">Most picked</option>
+              <option value="name">Name</option>
+              <option value="sku">SKU</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid" id="products"></div>
+        <div class="more"><button type="button" class="btn" id="more" hidden>Show more products</button></div>
       </div>
-      <div class="note" id="order-note" role="status"></div>
-    </form>
-  </section>
-
-  <section class="panel" id="p-orders" aria-labelledby="h-orders">
-    <div class="head"><h2 id="h-orders">Orders</h2><button type="button" id="clear-done">Clear dispatched</button></div>
-    <p class="hint">Live progress of the orders placed here. Each pick and pack task shows the worker that did it; attempt 2 or more means a task was reclaimed after a worker failed.</p>
-    <form class="track" id="track-form">
-      <input id="track-id" class="mono" placeholder="Track an order ID, e.g. ord-1a2b3c4d5e6f7a8b" aria-label="Order ID to track">
-      <button type="submit">Track</button>
-    </form>
-    <div class="orders" id="orders"></div>
-  </section>
-
-  <section class="panel" id="p-stock" aria-labelledby="h-stock">
-    <h2 id="h-stock">Stock</h2>
-    <p class="hint">Inventory in Cloud SQL. Click a product to add it to the order.</p>
-    <div class="tabs" role="group" aria-label="Zone">
-      <button type="button" data-zone="A" aria-pressed="true">Zone A</button>
-      <button type="button" data-zone="B" aria-pressed="false">Zone B</button>
-      <button type="button" data-zone="C" aria-pressed="false">Zone C</button>
-    </div>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>Product</th><th>Bin</th><th class="r">On hand</th><th class="r">Reserved</th><th class="r" title="Units picked since this page opened">Picked</th></tr></thead>
-        <tbody id="stock-body"><tr><td colspan="5" class="empty">Loading stock…</td></tr></tbody>
-      </table>
     </div>
   </section>
 
-  <section class="panel" id="p-workers" aria-labelledby="h-workers">
-    <h2 id="h-workers">Workers</h2>
-    <p class="hint">Picking and Packing pods registered in ZooKeeper. New pods appear when the autoscaler adds them; a killed pod disappears.</p>
-    <div class="counts">
-      <div class="count"><b id="n-pickers">–</b><span>pickers</span></div>
-      <div class="count"><b id="n-packers">–</b><span>packers</span></div>
-      <div class="count"><b id="n-slots">–</b><span>worker slots</span></div>
+  <!-- ========================================================= YOUR ORDERS -->
+  <section id="view-orders" aria-label="Your orders" hidden>
+    <div class="orders-head">
+      <div>
+        <h2>Your orders</h2>
+        <p class="hint">Orders placed from this browser, newest first. Each one is tracked live as the warehouse picks, packs and dispatches it.</p>
+        <div class="chips" id="order-chips"></div>
+      </div>
+      <form class="track" id="track-form">
+        <input id="track-id" class="mono" placeholder="Track an order ID" aria-label="Order ID to track">
+        <button type="submit" class="btn small">Track</button>
+      </form>
     </div>
-    <div class="workers" id="workers"></div>
+    <div class="order-list" id="order-list"></div>
   </section>
 
-  <section class="panel" id="p-burst" aria-labelledby="h-burst">
-    <h2 id="h-burst">Load burst</h2>
-    <p class="hint">Sends random orders at a steady rate, like a small load test. Watch the workers and analytics respond.</p>
-    <div class="row">
-      <div><label for="burst-count">Orders (max 300)</label><input id="burst-count" type="number" min="1" max="300" value="50"></div>
-      <div><label for="burst-rate">Per second (max 20)</label><input id="burst-rate" type="number" min="1" max="20" value="5"></div>
+  <!-- ========================================================= WAREHOUSE -->
+  <section id="view-warehouse" aria-label="Warehouse" hidden>
+    <div class="kpis">
+      <div class="card kpi"><b id="k-open">–</b><span>Orders in progress</span></div>
+      <div class="card kpi"><b id="k-done">–</b><span>Orders dispatched</span></div>
+      <div class="card kpi"><b id="k-wait">–</b><span>Tasks waiting for a worker</span></div>
+      <div class="card kpi"><b id="k-workers">–</b><span>Pickers · packers live</span></div>
+      <div class="card kpi"><b id="k-picks">–</b><span>Items picked, last full minute</span></div>
+      <div class="card kpi"><b id="k-reclaimed">–</b><span>Tasks reclaimed, last 30 min</span></div>
     </div>
-    <div class="actions"><button type="button" class="primary" id="burst-start">Start burst</button><button type="button" id="burst-stop" disabled>Stop</button></div>
-    <div class="progress" aria-hidden="true"><div id="burst-bar"></div></div>
-    <div class="burst-stats num"><span>Sent <b id="burst-sent">0</b></span><span>Accepted <b id="burst-ok">0</b></span><span>Refused <b id="burst-bad">0</b></span></div>
-    <div class="note" id="burst-note" role="status"></div>
-  </section>
 
-  <section class="panel" id="p-analytics" aria-labelledby="h-analytics">
-    <div class="head"><h2 id="h-analytics">Analytics</h2><span class="window-meta" id="window-meta"></span></div>
-    <p class="hint">Flink on Dataproc counts task events in 1-minute windows per zone and publishes them to a Kafka results topic; this is the latest window for each zone.</p>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>Zone</th><th class="r">Tasks created</th><th class="r">Picks</th><th class="r">Packs</th><th class="r">Dispatched</th>
-          <th class="r">Abandoned</th><th class="r">Reclaimed</th><th class="r">Active workers</th><th class="r">Queue depth</th><th class="r">Mean recovery</th><th>Window</th></tr></thead>
-        <tbody id="analytics-body"><tr><td colspan="11" class="empty">Loading analytics…</td></tr></tbody>
-      </table>
+    <div class="wh">
+      <div class="card pad">
+        <div class="sect-head">
+          <div><h3>Warehouse floor</h3>
+            <p class="hint">Zones A to C hold the bins, laid out as aisles and bays the way the Picking service plans its routes. Every pick route starts at (0,0). An idle picker waits there; a picker holding a task is drawn at that task's bin.</p></div>
+        </div>
+        <div class="map" id="map"></div>
+        <div class="legend">
+          <span><i style="background:var(--pick)"></i>Picker</span><span><i style="background:var(--pack)"></i>Packer</span>
+          <span><i style="background:var(--pick-soft);border:1px solid var(--pick);border-radius:2px"></i>Bin being picked</span>
+          <span id="map-note"></span>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <h3>Workers</h3>
+        <p class="hint">Pods registered in ZooKeeper. The autoscaler adds pickers under load and removes them about three minutes after it drops.</p>
+        <div class="counts" style="margin-top:10px">
+          <div><b id="n-pick">–</b><span>pickers</span></div>
+          <div><b id="n-pack">–</b><span>packers</span></div>
+          <div><b id="n-busy">–</b><span>busy now</span></div>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:6px" id="spark-cap">Pickers over the last 15 minutes</div>
+        <svg class="spark" id="spark" viewBox="0 0 300 56" preserveAspectRatio="none" role="img" aria-label="Number of pickers over the last 15 minutes"></svg>
+        <div class="wlist" id="wlist"></div>
+        <div class="log" id="wlog" aria-label="Workers joining and leaving"></div>
+      </div>
+
+      <div class="card pad full">
+        <div class="sect-head">
+          <div><h3>Analytics</h3><p class="hint">Flink on Dataproc counts task events in 1-minute windows per zone and publishes them to Kafka; these are the last 30 windows.</p></div>
+          <span class="stale" id="stale"></span>
+        </div>
+        <div class="charts">
+          <div class="chart" id="c-throughput"></div>
+          <div class="chart" id="c-queue"></div>
+          <div class="chart" id="c-workers"></div>
+          <div class="chart" id="c-failures"></div>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <div class="sect-head">
+          <div><h3>All orders</h3><p class="hint">The 100 newest orders from every customer, burst and load test included.</p>
+            <div class="chips" id="all-chips"></div></div>
+        </div>
+        <div class="all-orders scroll-x">
+          <table>
+            <thead><tr><th>Placed</th><th>Order</th><th>Customer</th><th class="r">Items</th><th>Speed</th><th>Status</th><th>Tasks</th></tr></thead>
+            <tbody id="all-body"><tr><td colspan="7" class="empty">Loading orders…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card pad load">
+        <div><h3>Generate load</h3><p class="hint">Sends random orders from this browser, like a small load test. Rush hour is heavy enough for the autoscaler to add pickers within a minute or two.</p></div>
+        <div class="presets">
+          <button type="button" class="preset" data-rate="10" data-seconds="10"><b>Quick burst</b><span>100 orders in 10 seconds</span></button>
+          <button type="button" class="preset" data-rate="20" data-seconds="180"><b>Rush hour</b><span>20 a second for 3 minutes</span></button>
+        </div>
+        <div class="custom">
+          <div class="field"><label for="l-rate">Orders per second (1–25)</label><input id="l-rate" type="number" min="1" max="25" value="10"></div>
+          <div class="field"><label for="l-secs">For how many seconds (5–600)</label><input id="l-secs" type="number" min="5" max="600" value="30"></div>
+          <button type="button" class="btn" id="l-start">Start</button>
+        </div>
+        <div class="progress" aria-hidden="true"><i id="l-bar"></i></div>
+        <div class="stats num"><span>Sent <b id="l-sent">0</b></span><span>Accepted <b id="l-ok">0</b></span><span>Refused <b id="l-bad">0</b></span><span id="l-time"></span></div>
+        <div><button type="button" class="btn small" id="l-stop" disabled>Stop</button></div>
+        <div class="msg" id="l-msg"></div>
+      </div>
     </div>
   </section>
 </main>
+
+<div class="overlay" id="overlay" hidden></div>
+<aside class="cart" id="cart" hidden aria-label="Cart">
+  <div class="cart-head"><h2>Your cart</h2><button type="button" class="btn small" id="cart-close">Close</button></div>
+  <div class="cart-body" id="cart-body"></div>
+  <div class="cart-foot">
+    <div class="speeds" role="radiogroup" aria-label="Delivery speed">
+      <label class="speed"><input type="radio" name="speed" value="0" checked><div><b>Standard</b><span>Priority 0 · picked in the order it arrived</span></div></label>
+      <label class="speed"><input type="radio" name="speed" value="5"><div><b>Express</b><span>Priority 5 · ahead of standard orders</span></div></label>
+      <label class="speed"><input type="radio" name="speed" value="9"><div><b>Priority</b><span>Priority 9 · the warehouse handles it first</span></div></label>
+    </div>
+    <div class="msg bad" id="cart-msg" role="status"></div>
+    <button type="button" class="btn cta" id="checkout">Place order</button>
+  </div>
+</aside>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <script>
 "use strict";
 // Every request uses a relative URL, so the page works behind the load balancer and
 // locally alike. These are the only routes the public load balancer exposes.
-const API = { orders: "/v1/orders", workers: "/v1/workers", analytics: "/v1/analytics/latest", stock: "/v1/stock" };
+const API = {
+  orders: "/v1/orders",
+  floor: "/v1/floor",
+  workers: "/v1/workers",
+  analytics: "/v1/analytics/latest",
+  windows: "/v1/analytics/windows",
+  stock: "/v1/stock",
+};
 const ZONES = ["A", "B", "C"];
-const ZONE_NAMES = { A: "A · picking", B: "B · picking", C: "C · picking", P: "P · packing", D: "D · dispatch" };
-const STEPS = ["ACCEPTED", "PICKING", "PACKING", "DISPATCHED"];
-const STORE_KEY = "warehouse-console-orders";
-const MAX_TRACKED = 30;
+const DEPTS = { A: "Electronics", B: "Home & Kitchen", C: "Books & Office" };
+const TYPES = {
+  A: ["Wireless Earbuds", "Power Bank", "USB-C Cable", "Smart Watch", "Bluetooth Speaker", "Mechanical Keyboard", "Wireless Mouse", "HD Webcam", "Phone Case", "Smart LED Bulb"],
+  B: ["Steel Water Bottle", "Ceramic Mug", "Non-stick Pan", "Bath Towel", "Cushion Cover", "Table Lamp", "Storage Box", "Knife Set", "Bedsheet Set", "Wall Clock"],
+  C: ["Ruled Notebook", "Gel Pen Pack", "Paperback Novel", "Laptop Backpack", "Desk Organiser", "Sticky Notes", "Daily Planner", "Marker Set", "Scientific Calculator", "Geometry Box"],
+};
+const COLOURS = [["Black", "#3a3f47"], ["White", "#9aa3ae"], ["Blue", "#2f6fd6"], ["Red", "#cf3b35"], ["Grey", "#6b7380"], ["Green", "#2a9d6f"], ["Teal", "#1b8a94"], ["Orange", "#d9822b"], ["Purple", "#7a4fc4"], ["Yellow", "#c9a227"]];
+const STATUS_TEXT = { ACCEPTED: "Order received", PICKING: "Being picked", PACKING: "Being packed", PACKED: "Packed, waiting for dispatch", DISPATCHED: "Dispatched", UNKNOWN: "Order not found" };
+const SPEEDS = { 0: "Standard", 5: "Express", 9: "Priority" };
 const $ = (id) => document.getElementById(id);
 
 // ------------------------------------------------------------------ helpers
 function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs || {})) {
+    if (value == null) continue;
     if (key === "class") node.className = value;
     else if (key === "text") node.textContent = value;
     else node.setAttribute(key, value);
   }
+  for (const child of children) if (child != null && child !== false) node.append(child);
+  return node;
+}
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, ...children) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attrs || {})) if (value != null) node.setAttribute(key, value);
   for (const child of children) if (child != null) node.append(child);
   return node;
 }
-const fmt = (n) => (n == null ? "–" : Number(n).toLocaleString());
-const shortWorker = (id) => (id ? id.replace(/^(picking|packing)-[a-z0-9]+-/, "$1 …") : "–");
-const sku = (zone, n) => `SKU-${zone}${String(n).padStart(3, "0")}`;
-const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+const fmt = (n) => (n == null || Number.isNaN(n) ? "–" : Number(n).toLocaleString());
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const clockS = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
   if (s < 60) return `${s}s ago`;
@@ -282,371 +489,612 @@ function ago(ms) {
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return `${Math.round(s / 86400)} days ago`;
 }
-function clock(ms) { return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+const shortId = (id) => (id || "").replace(/^(picking|packing)-[a-z0-9]+-/, "");
+function load(key, fallback) { try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch (_) { return fallback; } }
+function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* storage may be blocked */ } }
+let toastTimer = null;
+function toast(text) {
+  $("toast").textContent = text; $("toast").hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 4000);
+}
+
+// Products: the SKU and stock are real; the friendly name is derived from the SKU.
+function product(sku) {
+  const zone = sku[4], n = Number(sku.slice(5));
+  const [colour, hex] = COLOURS[n % 10];
+  return { sku, zone, n, name: `${TYPES[zone][Math.floor(n / 10)]}, ${colour}`, hex, dept: DEPTS[zone] };
+}
+function glyph(zone, colour) {
+  const s = { fill: "none", stroke: colour, "stroke-width": "2.2", "stroke-linecap": "round", "stroke-linejoin": "round" };
+  const box = svg("svg", { viewBox: "0 0 48 48", "aria-hidden": "true" });
+  if (zone === "A") box.append(svg("rect", { x: 9, y: 8, width: 30, height: 32, rx: 4, ...s }), svg("circle", { cx: 24, cy: 27, r: 7, ...s }), svg("path", { d: "M18 14h12", ...s }));
+  else if (zone === "B") box.append(svg("path", { d: "M12 16h20v16a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6z", ...s }), svg("path", { d: "M32 20h3a4 4 0 0 1 0 8h-3M16 10c0-2 2-2 2-4M22 10c0-2 2-2 2-4M28 10c0-2 2-2 2-4", ...s }));
+  else box.append(svg("path", { d: "M10 10h12a4 4 0 0 1 4 4v24a3 3 0 0 0-3-3H10zM38 10H28a4 4 0 0 0-4 4v24a3 3 0 0 1 3-3h11z", ...s }));
+  return box;
+}
+function thumb(sku, cls) {
+  const p = product(sku);
+  return el("div", { class: cls, style: `background:${p.hex}22` }, glyph(p.zone, p.hex));
+}
 
 let apiOk = null;
 function setApi(ok, message) {
   if (ok === apiOk && ok) return;
   apiOk = ok;
   $("api-dot").className = "dot " + (ok ? "ok" : "bad");
-  $("api-text").textContent = ok ? "Connected to the warehouse API" : message || "Cannot reach the warehouse API";
+  $("api-text").textContent = ok ? "Live: connected to the warehouse" : message || "Cannot reach the warehouse API";
 }
-
 async function api(path, options) {
   let response;
   try {
     response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
   } catch (err) {
-    setApi(false, "Cannot reach the warehouse API. Check the network, then wait; this page retries.");
+    setApi(false, "Cannot reach the warehouse. Retrying…");
     throw err;
   }
   let body = null;
   try { body = await response.json(); } catch (_) { /* not JSON */ }
-  if (response.status >= 500) setApi(false, "The warehouse API is returning errors. This page keeps retrying.");
+  if (response.status >= 500) setApi(false, "The warehouse API is returning errors. Retrying…");
   else setApi(true);
   return { status: response.status, body };
 }
-
 function errorText(result) {
   const detail = result.body && result.body.detail;
   if (Array.isArray(detail)) return detail.map((d) => `${(d.loc || []).slice(1).join(" ")}: ${d.msg}`).join("; ");
   if (result.status === 409) return `Not enough stock: ${detail || "the order was refused"}.`;
-  if (result.status === 503) return "Inventory is unavailable right now. Try again in a few seconds.";
+  if (result.status === 503) return "The warehouse is busy or restarting. Try again in a few seconds.";
   return detail ? String(detail) : `The order was refused (HTTP ${result.status}).`;
 }
 
-// ------------------------------------------------------------------ new order
-function addLine(zone = "A", number = 1, quantity = 1) {
-  if ($("lines").children.length >= 10) return;
-  const zoneSel = el("select", { "aria-label": "Zone" });
-  for (const z of ZONES) zoneSel.append(el("option", { value: z, text: z }));
-  zoneSel.value = zone;
-  const product = el("input", { type: "number", min: "0", max: "99", value: String(number), "aria-label": "Product number, 0 to 99" });
-  const qty = el("input", { type: "number", min: "1", max: "1000", value: String(quantity), "aria-label": "Quantity" });
-  const remove = el("button", { type: "button", class: "icon", "aria-label": "Remove item", title: "Remove item", text: "×" });
-  const preview = el("span", { class: "mono muted code" });
-  const row = el("div", { class: "line" }, zoneSel, product, preview, qty, remove);
-  const update = () => { preview.textContent = sku(zoneSel.value, Math.min(99, Math.max(0, Number(product.value) || 0))); };
-  zoneSel.addEventListener("change", update);
-  product.addEventListener("input", update);
-  remove.addEventListener("click", () => { if ($("lines").children.length > 1) row.remove(); });
-  update();
-  $("lines").append(row);
-}
-
-function readLines() {
-  return [...$("lines").children].map((row) => {
-    const [zoneSel] = row.getElementsByTagName("select");
-    const [product, qty] = row.getElementsByTagName("input");
-    return { sku: sku(zoneSel.value, Math.min(99, Math.max(0, Number(product.value) || 0))), quantity: Number(qty.value) };
-  });
-}
-
-function randomLines() {
-  const zones = ZONES.filter(() => Math.random() < 0.6);
-  return (zones.length ? zones : ["A"]).map((z) => ({ zone: z, number: randInt(0, 99), quantity: randInt(1, 3) }));
-}
-
-function setRandomOrder() {
-  $("lines").replaceChildren();
-  for (const l of randomLines()) addLine(l.zone, l.number, l.quantity);
-}
-
-async function placeOrder(payload) {
-  return api(API.orders, { method: "POST", body: JSON.stringify(payload) });
-}
-
-$("add-line").addEventListener("click", () => addLine());
-$("random-order").addEventListener("click", setRandomOrder);
-$("order-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const note = $("order-note");
-  const customer = $("customer").value.trim();
-  const lines = readLines();
-  if (!customer) { note.className = "note bad"; note.textContent = "Enter a customer name."; return; }
-  if (lines.some((l) => !(l.quantity >= 1 && l.quantity <= 1000))) {
-    note.className = "note bad"; note.textContent = "Each quantity must be between 1 and 1000."; return;
+// ------------------------------------------------------------------ views
+const VIEWS = ["shop", "orders", "warehouse"];
+let view = "shop";
+function route() {
+  const wanted = (location.hash || "#shop").slice(1);
+  view = VIEWS.includes(wanted) ? wanted : "shop";
+  for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
+  for (const a of document.querySelectorAll("nav.tabs a")) {
+    if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
-  $("submit-order").disabled = true;
-  note.className = "note"; note.textContent = "";
+  refreshNow();
+}
+window.addEventListener("hashchange", route);
+
+// ------------------------------------------------------------------ shop
+const stock = {};            // sku -> stock row
+let dept = "all", shown = 24;
+function renderCats() {
+  const total = Object.keys(stock).length;
+  const make = (key, label, count, colour, sub) => {
+    const b = el("button", { type: "button", class: "cat", "aria-pressed": String(dept === key) },
+      el("span", {}, colour ? el("i", { class: "sw", style: `background:${colour}` }) : null, label, sub ? el("small", { text: sub }) : null), el("span", { class: "n", text: fmt(count) }));
+    b.addEventListener("click", () => { dept = key; shown = 24; renderCats(); renderProducts(); });
+    return b;
+  };
+  $("cats").replaceChildren(make("all", "All departments", total),
+    ...ZONES.map((z) => make(z, DEPTS[z], Object.values(stock).filter((s) => s.zone === z).length, `var(--zone-${z.toLowerCase()})`, `zone ${z}`)));
+}
+function renderProducts() {
+  const q = $("search").value.trim().toLowerCase();
+  let rows = Object.values(stock).filter((s) => dept === "all" || s.zone === dept)
+    .map((s) => ({ ...s, ...product(s.sku) }))
+    .filter((p) => !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.dept.toLowerCase().includes(q));
+  const sort = $("sort").value;
+  rows.sort(sort === "name" ? (a, b) => a.name.localeCompare(b.name) : sort === "sku" ? (a, b) => a.sku.localeCompare(b.sku) : (a, b) => (b.picked || 0) - (a.picked || 0) || a.sku.localeCompare(b.sku));
+  $("shop-title").textContent = dept === "all" ? "All departments" : `${DEPTS[dept]} (zone ${dept})`;
+  $("shop-count").textContent = Object.keys(stock).length ? `${fmt(rows.length)} products${q ? ` matching “${q}”` : ""}` : "Loading products…";
+  const cards = rows.slice(0, shown).map((p) => {
+    const qtyInput = el("input", { type: "number", min: "1", max: "1000", value: "1", "aria-label": `Quantity of ${p.name}` });
+    const minus = el("button", { type: "button", "aria-label": "One fewer", text: "−" });
+    const plus = el("button", { type: "button", "aria-label": "One more", text: "+" });
+    minus.addEventListener("click", () => { qtyInput.value = Math.max(1, Number(qtyInput.value) - 1); });
+    plus.addEventListener("click", () => { qtyInput.value = Math.min(1000, Number(qtyInput.value) + 1); });
+    const add = el("button", { type: "button", class: "btn cta", text: "Add to cart" });
+    add.addEventListener("click", () => addToCart(p.sku, Math.min(1000, Math.max(1, Number(qtyInput.value) || 1))));
+    const free = p.on_hand - p.reserved;
+    return el("div", { class: "card product" },
+      thumb(p.sku, "img"),
+      el("div", { class: "name", text: p.name }),
+      el("div", { class: "meta mono", text: `${p.sku} · bin ${p.bin}` }),
+      el("div", { class: "stock", text: free > 0 ? `In stock · ${fmt(free)}` : "Out of stock" }),
+      el("div", { class: "sold", text: p.picked ? `${fmt(p.picked)} picked so far` : "Not picked yet" }),
+      el("div", { class: "buy" }, el("div", { class: "qty" }, minus, qtyInput, plus), add));
+  });
+  $("products").replaceChildren(...(cards.length ? cards : [el("div", { class: "empty", text: Object.keys(stock).length ? "No products match your search." : "Loading products…" })]));
+  $("more").hidden = rows.length <= shown;
+}
+async function refreshStock() {
+  const results = await Promise.allSettled(ZONES.map((z) => api(`${API.stock}?zone=${z}&limit=100`)));
+  for (const r of results) if (r.status === "fulfilled" && r.value.status === 200) for (const item of r.value.body.items) stock[item.sku] = item;
+  renderCats(); renderProducts();
+}
+$("search-form").addEventListener("submit", (e) => { e.preventDefault(); if (view !== "shop") location.hash = "#shop"; shown = 24; renderProducts(); });
+$("search").addEventListener("input", () => { shown = 24; renderProducts(); });
+$("sort").addEventListener("change", renderProducts);
+$("more").addEventListener("click", () => { shown += 24; renderProducts(); });
+
+// ------------------------------------------------------------------ customer
+let customer = load("wh-customer", "Guest");
+function renderWho() { $("who-btn").textContent = customer; }
+$("who-btn").addEventListener("click", () => {
+  const field = el("input", { value: customer, maxlength: "100", "aria-label": "Your name" });
+  const save = el("button", { type: "button", class: "btn small cta", text: "Save" });
+  const box = el("div", { style: "display:flex;gap:6px" }, field, save);
+  $("who-btn").replaceWith(box); field.focus(); field.select();
+  const done = () => { customer = field.value.trim() || "Guest"; store("wh-customer", customer); box.replaceWith($("who-btn")); renderWho(); };
+  save.addEventListener("click", done);
+  field.addEventListener("keydown", (e) => { if (e.key === "Enter") done(); if (e.key === "Escape") { box.replaceWith($("who-btn")); } });
+});
+
+// ------------------------------------------------------------------ cart
+let cart = load("wh-cart", {});   // sku -> quantity
+function saveCart() { store("wh-cart", cart); $("cart-count").textContent = Object.values(cart).reduce((a, b) => a + b, 0); }
+function addToCart(sku, qty) {
+  if (!cart[sku] && Object.keys(cart).length >= 50) { toast("A cart holds up to 50 different products."); return; }
+  cart[sku] = Math.min(1000, (cart[sku] || 0) + qty);
+  saveCart(); renderCart();
+  toast(`Added ${qty} × ${product(sku).name} to your cart`);
+}
+function openCart(open) { $("cart").hidden = !open; $("overlay").hidden = !open; if (open) { renderCart(); $("cart-close").focus(); } }
+function renderCart() {
+  const skus = Object.keys(cart);
+  if (!skus.length) {
+    $("cart-body").replaceChildren(el("div", { class: "empty", text: "Your cart is empty. Add products from the shop." }));
+    $("checkout").disabled = true; return;
+  }
+  $("checkout").disabled = false;
+  $("cart-body").replaceChildren(...skus.map((sku) => {
+    const p = product(sku), s = stock[sku];
+    const q = el("input", { type: "number", min: "1", max: "1000", value: String(cart[sku]), "aria-label": `Quantity of ${p.name}` });
+    q.addEventListener("change", () => { cart[sku] = Math.min(1000, Math.max(1, Number(q.value) || 1)); q.value = cart[sku]; saveCart(); });
+    const remove = el("button", { type: "button", class: "link", text: "Remove" });
+    remove.addEventListener("click", () => { delete cart[sku]; saveCart(); renderCart(); });
+    return el("div", { class: "cart-line" }, thumb(sku, "thumb"),
+      el("div", {}, el("div", { class: "nm", text: p.name }), el("div", { class: "mono muted", text: `${sku} · bin ${s ? s.bin : "…"}` }),
+        el("div", { class: "row2" }, el("div", { class: "qty" }, q), remove)), el("div"));
+  }));
+}
+$("cart-open").addEventListener("click", () => openCart(true));
+$("cart-close").addEventListener("click", () => openCart(false));
+$("overlay").addEventListener("click", () => openCart(false));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("cart").hidden) openCart(false); });
+$("checkout").addEventListener("click", async () => {
+  const lines = Object.entries(cart).map(([sku, quantity]) => ({ sku, quantity }));
+  if (!lines.length) return;
+  const priority = Number(document.querySelector('input[name="speed"]:checked').value);
+  $("checkout").disabled = true; $("cart-msg").textContent = "";
   try {
-    const result = await placeOrder({ customer, priority: Number($("priority").value), lines });
+    const result = await api(API.orders, { method: "POST", body: JSON.stringify({ customer, priority, lines }) });
     if (result.status === 202 || result.status === 200) {
-      note.className = "note ok";
-      note.textContent = `Accepted as ${result.body.order_id}. Watch it move in Orders.`;
-      track(result.body.order_id, customer, true);
+      remember(result.body.order_id, { speed: priority, items: lines.length });
+      cart = {}; saveCart(); openCart(false);
+      toast(`Order placed: ${result.body.order_id}`);
+      location.hash = "#orders";
     } else {
-      note.className = "note bad"; note.textContent = errorText(result);
+      $("cart-msg").textContent = errorText(result);
     }
   } catch (_) {
-    note.className = "note bad"; note.textContent = "The order could not be sent. Check the connection and try again.";
+    $("cart-msg").textContent = "The order could not be sent. Check your connection and try again.";
   } finally {
-    $("submit-order").disabled = false;
+    $("checkout").disabled = !Object.keys(cart).length;
   }
 });
 
-// ------------------------------------------------------------------ orders
-// Tracked orders: {id, customer, placedAt, placedHere, status, data, doneAt}
-let tracked = [];
-try { tracked = JSON.parse(localStorage.getItem(STORE_KEY) || "[]").slice(0, MAX_TRACKED); } catch (_) { tracked = []; }
-function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(tracked.map(({ id, customer, placedAt, placedHere, status, doneAt }) => ({ id, customer, placedAt, placedHere, status, doneAt })))); } catch (_) { /* storage may be blocked */ }
+// ------------------------------------------------------------------ your orders
+// Kept in this browser: [{id, placedAt, speed, items, seen: {PICKING: ms, PACKING: ms}}]
+let mine = load("wh-orders", []);
+const details = {};          // id -> {order, fulfilment} from the batch or detail call
+const open = new Set();      // ids whose warehouse details are expanded
+function saveMine() { store("wh-orders", mine.slice(0, 200)); $("orders-count").textContent = mine.length; }
+function remember(id, extra) {
+  if (!mine.some((o) => o.id === id)) mine.unshift({ id, placedAt: Date.now(), seen: {}, ...extra });
+  saveMine(); refreshMine();
 }
-
-function track(id, customer, placedHere = false) {
-  id = id.trim();
-  if (!id) return;
-  if (!tracked.some((o) => o.id === id)) {
-    tracked.unshift({ id, customer: customer || "", placedAt: Date.now(), placedHere, status: "ACCEPTED", data: null, doneAt: null });
-    tracked = tracked.slice(0, MAX_TRACKED);
-    save();
-  }
-  renderOrders();
-  refreshOrder(tracked.find((o) => o.id === id));
-}
-
 function stepState(status, step) {
-  const order = { ACCEPTED: 0, PICKING: 1, PACKING: 2, PACKED: 2, DISPATCHED: 3 };
-  const at = order[status] ?? -1;
-  const idx = STEPS.indexOf(step);
-  if (status === "DISPATCHED" || idx < at) return "done";
-  return idx === at ? "now" : "";
+  const rank = { ACCEPTED: 0, PICKING: 1, PACKING: 2, PACKED: 2.5, DISPATCHED: 3 };
+  const at = rank[status] ?? 0;
+  const idx = { Ordered: 0, Picked: 1, Packed: 2, Dispatched: 3 }[step];
+  if (idx === 0 || at >= 3) return "done";
+  if (step === "Picked") return at >= 2 ? "done" : at === 1 ? "now" : "";
+  if (step === "Packed") return at >= 2.5 ? "done" : at === 2 ? "now" : "";
+  return "";
 }
-
 function orderCard(o) {
-  const status = o.status || "ACCEPTED";
-  const label = status === "UNKNOWN" ? "NOT FOUND" : status;
-  const remove = el("button", { type: "button", class: "icon", "aria-label": `Stop tracking ${o.id}`, title: "Stop tracking", text: "×" });
-  remove.addEventListener("click", () => { tracked = tracked.filter((t) => t.id !== o.id); save(); renderOrders(); });
-  let timing = o.customer ? `${o.customer} · ` : "";
-  const created = o.data && o.data.created_at ? Date.parse(o.data.created_at) : null;
-  if (o.doneAt) timing += `dispatched ${((o.doneAt - o.placedAt) / 1000).toFixed(1)} s after it was placed`;
-  else if (o.placedHere) timing += `placed ${ago(o.placedAt)}`;
-  else if (created) timing += `created ${ago(created)}`;
-  else timing += "tracking";
-  const card = el("div", { class: "order" },
-    el("div", { class: "top" },
-      el("span", { class: "id mono", text: o.id }),
-      el("span", { class: `pill ${status}`, text: label }),
-      remove),
-    el("div", { class: "meta", text: timing }));
-  if (status === "UNKNOWN") {
-    card.append(el("div", { class: "muted", text: "No order with this ID." }));
-    return card;
-  }
-  const steps = el("div", { class: "steps" });
-  for (const s of STEPS) steps.append(el("div", { class: `step ${stepState(status, s)}`, text: s[0] + s.slice(1).toLowerCase() }));
-  card.append(steps);
-  const tasks = (o.data && o.data.fulfilment && o.data.fulfilment.tasks) || [];
-  if (tasks.length) {
-    const body = el("tbody");
-    for (const t of tasks) {
-      const attempt = t.attempt > 1 ? el("span", { class: "attempt", title: "Reclaimed after a worker failed", text: `attempt ${t.attempt}` }) : el("span", { class: "muted", text: String(t.attempt) });
-      body.append(el("tr", {},
-        el("td", { text: t.task_type }), el("td", { text: t.zone }), el("td", { text: t.status }),
-        el("td", { class: "mono", title: t.worker_id || "", text: shortWorker(t.worker_id) }), el("td", { class: "r" }, attempt)));
-    }
-    card.append(el("div", { class: "scroll" }, el("table", { class: "tasks" },
-      el("thead", {}, el("tr", {}, el("th", { text: "Task" }), el("th", { text: "Zone" }), el("th", { text: "Status" }), el("th", { text: "Worker" }), el("th", { class: "r", text: "Attempt" }))),
-      body)));
-  } else if (o.data) {
-    card.append(el("div", { class: "muted", text: "Waiting for the Job Scheduler to pick the order up from Kafka…" }));
-  }
+  const d = details[o.id];
+  const status = d === null ? "UNKNOWN" : (d && d.fulfilment && d.fulfilment.status) || "ACCEPTED";
+  const created = d && d.created_at ? Date.parse(d.created_at) : o.placedAt;
+  const lines = (d && d.lines) || [];
+  const speed = SPEEDS[d ? d.priority : o.speed] || `Priority ${d ? d.priority : o.speed}`;
+  const times = {
+    Ordered: created,
+    Picked: o.seen && (o.seen.PACKING || o.seen.PACKED),
+    Packed: o.seen && o.seen.PACKED,
+    Dispatched: d && d.fulfilment && d.fulfilment.dispatched_at ? Date.parse(d.fulfilment.dispatched_at) : o.seen && o.seen.DISPATCHED,
+  };
+  const tracker = el("div", { class: "tracker" }, ...["Ordered", "Picked", "Packed", "Dispatched"].map((s) =>
+    el("div", { class: `tstep ${stepState(status, s)}` }, s, el("small", { text: times[s] && stepState(status, s) === "done" ? clock(times[s]) : " " }))));
+  const items = el("div", { class: "items" }, ...lines.map((l) => el("div", { class: "it" }, thumb(l.sku, "thumb"),
+    el("span", {}, `${product(l.sku).name} `, el("span", { class: "muted", text: `× ${l.quantity} · bin ${l.bin}` })))));
+  const remove = el("button", { type: "button", class: "link", text: "Remove from this list" });
+  remove.addEventListener("click", () => { mine = mine.filter((m) => m.id !== o.id); saveMine(); renderMine(); });
+  const more = el("details", {}, el("summary", { text: "Warehouse details: tasks, workers and attempts" }), el("div", { class: "scroll-x", id: `t-${o.id}` }, el("div", { class: "muted", text: "Loading…" })));
+  if (open.has(o.id)) more.open = true;
+  more.addEventListener("toggle", () => { if (more.open) { open.add(o.id); refreshDetail(o.id); } else open.delete(o.id); });
+  const f = d && d.fulfilment;
+  const reclaimed = f && f.max_attempt > 1;
+  const card = el("article", { class: "card order" },
+    el("div", { class: "strip" },
+      el("div", {}, "Order placed", el("b", { text: `${new Date(created).toLocaleDateString()} ${clock(created)}` })),
+      el("div", {}, "Delivery", el("b", { text: speed })),
+      el("div", {}, "Items", el("b", { text: String(lines.length || o.items || "–") })),
+      el("div", { class: "end" }, "Order #", el("b", { class: "mono", text: o.id }))),
+    el("div", { class: "body" },
+      el("div", {},
+        el("div", { class: `state ${status}`, text: STATUS_TEXT[status] || status }),
+        el("div", { class: "muted", style: "font-size:12.5px" }, f && f.tasks_total ? `${f.tasks_done} of ${f.tasks_total} warehouse tasks done` : status === "UNKNOWN" ? "No order has this ID." : "Waiting for the Job Scheduler to pick it up from Kafka", reclaimed ? " · " : "", reclaimed ? el("span", { class: "attempt", text: "a task was reclaimed after a worker failed" }) : null),
+        tracker, items),
+      el("div", { class: "side" }, el("span", { class: `pill s-${status}`, text: status }), remove),
+      status === "UNKNOWN" ? null : more));
   return card;
 }
-
-function renderOrders() {
-  const list = $("orders");
-  if (!tracked.length) {
-    list.replaceChildren(el("div", { class: "empty", text: "No orders yet. Place one, or start a burst." }));
+function renderMine() {
+  const counts = {};
+  for (const o of mine) { const d = details[o.id]; const s = d === null ? "UNKNOWN" : (d && d.fulfilment && d.fulfilment.status) || "ACCEPTED"; counts[s] = (counts[s] || 0) + 1; }
+  $("order-chips").replaceChildren(...Object.entries(counts).map(([s, n]) => el("span", { class: "chip" }, `${STATUS_TEXT[s] || s}: `, el("b", { text: n }))));
+  if (!mine.length) {
+    const go = el("a", { href: "#shop", text: "Go to the shop" });
+    $("order-list").replaceChildren(el("div", { class: "card empty" }, "You have not placed any orders from this browser yet. ", go));
     return;
   }
-  list.replaceChildren(...tracked.map(orderCard));
+  const list = $("order-list"), top = list.scrollTop;
+  list.replaceChildren(...mine.map(orderCard));
+  list.scrollTop = top;
+  for (const id of open) refreshDetail(id);
 }
-
-async function refreshOrder(o) {
-  if (!o) return;
+async function refreshMine() {
+  if (!mine.length) { renderMine(); return; }
+  for (let i = 0; i < mine.length; i += 100) {
+    const batch = mine.slice(i, i + 100);
+    try {
+      const result = await api(`${API.orders}?ids=${batch.map((o) => encodeURIComponent(o.id)).join(",")}`);
+      if (result.status !== 200) continue;
+      const found = new Map(result.body.orders.map((o) => [o.order_id, o]));
+      for (const o of batch) {
+        const got = found.get(o.id);
+        details[o.id] = got || null;
+        const s = got && got.fulfilment && got.fulfilment.status;
+        if (s) { o.seen = o.seen || {}; if (!o.seen[s]) o.seen[s] = Date.now(); }
+      }
+    } catch (_) { /* shown in the header */ }
+  }
+  saveMine(); renderMine();
+}
+async function refreshDetail(id) {
   try {
-    const result = await api(`${API.orders}/${encodeURIComponent(o.id)}`);
-    if (result.status === 404) { o.status = "UNKNOWN"; }
-    else if (result.status === 200) {
-      o.data = result.body;
-      o.customer = o.customer || result.body.customer || "";
-      const status = (result.body.fulfilment && result.body.fulfilment.status) || "ACCEPTED";
-      // A dispatch time is shown only for orders placed here and seen before they finished.
-      if (status === "DISPATCHED" && o.placedHere && o.status !== "DISPATCHED" && !o.doneAt) o.doneAt = Date.now();
-      o.status = status;
-    }
-    save();
-    renderOrders();
+    const result = await api(`${API.orders}/${encodeURIComponent(id)}`);
+    const box = $(`t-${id}`);
+    if (!box || result.status !== 200) return;
+    const tasks = (result.body.fulfilment && result.body.fulfilment.tasks) || [];
+    if (!tasks.length) { box.replaceChildren(el("div", { class: "muted", text: "No warehouse tasks yet." })); return; }
+    box.replaceChildren(el("table", {},
+      el("thead", {}, el("tr", {}, ...["Task", "Zone", "Status", "Worker", "Attempt"].map((h) => el("th", { text: h })))),
+      el("tbody", {}, ...tasks.map((t) => el("tr", {},
+        el("td", { text: t.task_type === "PICK" ? "Pick" : "Pack" }), el("td", { text: t.zone }), el("td", { text: t.status }),
+        el("td", { class: "mono", title: t.worker_id || "", text: t.worker_id || "–" }),
+        el("td", {}, t.attempt > 1 ? el("span", { class: "attempt", text: `attempt ${t.attempt}` }) : String(t.attempt)))))));
   } catch (_) { /* shown in the header */ }
 }
+$("track-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const id = $("track-id").value.trim();
+  if (id) { remember(id, {}); $("track-id").value = ""; }
+});
 
-async function pollOrders() {
-  const active = tracked.filter((o) => o.status !== "DISPATCHED" && o.status !== "UNKNOWN" || !o.data);
-  await Promise.all(active.slice(0, 12).map(refreshOrder));
+// ------------------------------------------------------------------ warehouse: floor map
+const CELL = 19, GAP = 3, ZW = 10 * (CELL + GAP), ZG = 34, X0 = 112, Y0 = 46;
+const zoneX = (z) => X0 + ZONES.indexOf(z) * (ZW + ZG);
+const STATION = { x: X0 + 3 * ZW + 2 * ZG + 36, packY: Y0, dispY: Y0 + 92, w: 112, h: 66 };
+function binXY(bin) {
+  const [zone, aisle, bay] = bin.split("-");
+  return { x: zoneX(zone) + Number(aisle) * (CELL + GAP) + CELL / 2, y: Y0 + Number(bay) * (CELL + GAP) + CELL / 2 };
 }
-
-$("track-form").addEventListener("submit", (event) => { event.preventDefault(); track($("track-id").value); $("track-id").value = ""; });
-$("clear-done").addEventListener("click", () => { tracked = tracked.filter((o) => o.status !== "DISPATCHED" && o.status !== "UNKNOWN"); save(); renderOrders(); });
-
-// ------------------------------------------------------------------ stock
-let stockZone = "A";
-const firstSeen = {}; // sku -> on_hand when this page first saw it
-async function refreshStock() {
-  try {
-    const result = await api(`${API.stock}?zone=${stockZone}&limit=12`);
-    if (result.status !== 200) {
-      $("stock-body").replaceChildren(el("tr", {}, el("td", { colspan: "5", class: "empty", text: "Stock is not available right now." })));
-      return;
+const START = { x: 32, y: Y0 + CELL / 2 };
+let mapSvg = null; const markers = new Map(); const cells = new Map();
+function buildMap() {
+  const width = STATION.x + STATION.w + 16, height = Y0 + 7 * (CELL + GAP) + 40;
+  mapSvg = svg("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": "Map of the warehouse floor with the workers' positions" });
+  for (const z of ZONES) {
+    mapSvg.append(svg("text", { x: zoneX(z), y: 20, class: "zl" }, `Zone ${z} · ${DEPTS[z]}`));
+    mapSvg.append(svg("rect", { x: zoneX(z), y: 26, width: ZW - GAP, height: 4, rx: 2, fill: `var(--zone-${z.toLowerCase()})` }));
+    for (let a = 0; a < 10; a++) {
+      for (let b = 0; b < 7; b++) {
+        const id = `${z}-${String(a).padStart(2, "0")}-${String(b).padStart(2, "0")}`;
+        const cell = svg("rect", { x: zoneX(z) + a * (CELL + GAP), y: Y0 + b * (CELL + GAP), width: CELL, height: CELL, rx: 3, class: "cell" }, svg("title", {}, `Bin ${id}`));
+        cells.set(id, cell); mapSvg.append(cell);
+      }
+      mapSvg.append(svg("text", { x: zoneX(z) + a * (CELL + GAP) + CELL / 2, y: Y0 + 7 * (CELL + GAP) + 12, "text-anchor": "middle" }, String(a)));
     }
-    const rows = result.body.items.map((item) => {
-      if (!(item.sku in firstSeen)) firstSeen[item.sku] = item.on_hand;
-      const picked = firstSeen[item.sku] - item.on_hand;
-      const row = el("tr", { title: `Add ${item.sku} to the order` },
-        el("td", { class: "mono", text: item.sku }), el("td", { class: "mono muted", text: item.bin }),
-        el("td", { class: "r num", text: fmt(item.on_hand) }), el("td", { class: "r num", text: fmt(item.reserved) }),
-        el("td", { class: "r num", text: picked > 0 ? fmt(picked) : "–" }));
-      row.addEventListener("click", () => addLine(item.zone, Number(item.sku.slice(-3)), 1));
-      return row;
-    });
-    $("stock-body").replaceChildren(...rows);
-  } catch (_) { /* shown in the header */ }
+  }
+  mapSvg.append(svg("text", { x: zoneX("A") - 6, y: Y0 + CELL - 4, "text-anchor": "end" }, "bay 0"));
+  mapSvg.append(svg("text", { x: zoneX("A") - 6, y: Y0 + 6 * (CELL + GAP) + CELL - 4, "text-anchor": "end" }, "bay 6"));
+  mapSvg.append(svg("text", { x: zoneX("B") + ZW / 2, y: Y0 + 7 * (CELL + GAP) + 28, "text-anchor": "middle" }, "aisles 0–9 in each zone"));
+  mapSvg.append(svg("rect", { x: 8, y: Y0 - 12, width: 48, height: 76, rx: 6, class: "start" }));
+  mapSvg.append(svg("text", { x: 32, y: Y0 + 78, "text-anchor": "middle" }, "start (0,0)"));
+  for (const [label, y] of [["Packing station", STATION.packY], ["Dispatch dock", STATION.dispY]]) {
+    mapSvg.append(svg("rect", { x: STATION.x, y, width: STATION.w, height: STATION.h, rx: 8, class: "station" }));
+    mapSvg.append(svg("text", { x: STATION.x + 8, y: y + 15 }, label));
+  }
+  $("map").replaceChildren(mapSvg);
 }
-for (const button of document.querySelectorAll(".tabs button")) {
-  button.addEventListener("click", () => {
-    stockZone = button.dataset.zone;
-    for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-pressed", String(b === button));
-    refreshStock();
+function placeMarker(id, kind, x, y, label, title) {
+  let g = markers.get(id);
+  if (!g) {
+    g = svg("g", { class: "worker" }, svg("circle", { r: 9, fill: kind === "picking" ? "var(--pick)" : "var(--pack)" }), svg("text", {}), svg("title", {}));
+    g.style.transform = `translate(${START.x}px, ${START.y}px)`;
+    markers.set(id, g); mapSvg.append(g);
+    void g.getBoundingClientRect();
+  }
+  g.querySelector("text").textContent = label;
+  g.querySelector("title").textContent = title;
+  g.style.transform = `translate(${x}px, ${y}px)`;
+}
+let lastFloor = null, workerList = [];
+function renderMap() {
+  if (!mapSvg) buildMap();
+  const tasks = (lastFloor && lastFloor.tasks) || [];
+  const byWorker = new Map();
+  for (const t of tasks) { if (!byWorker.has(t.worker_id)) byWorker.set(t.worker_id, []); byWorker.get(t.worker_id).push(t); }
+  const activeBins = new Set(tasks.filter((t) => t.task_type === "PICK").flatMap((t) => t.bins));
+  for (const [id, cell] of cells) cell.classList.toggle("active", activeBins.has(id));
+  const live = new Set();
+  const pickers = workerList.filter((w) => w.capability === "picking");
+  const packers = workerList.filter((w) => w.capability === "packing");
+  let idle = 0, slot = new Map();
+  pickers.forEach((w, i) => {
+    live.add(w.worker_id);
+    const mineT = (byWorker.get(w.worker_id) || []).filter((t) => t.task_type === "PICK" && t.bins.length);
+    const label = String(i + 1);
+    if (mineT.length) {
+      const bin = mineT[0].bins[0], p = binXY(bin), k = slot.get(bin) || 0; slot.set(bin, k + 1);
+      placeMarker(w.worker_id, "picking", p.x + k * 6, p.y - k * 6, label, `${w.worker_id}: picking ${mineT.length} task(s), now at bin ${bin}`);
+    } else {
+      placeMarker(w.worker_id, "picking", START.x + (idle % 2) * 16 - 8, START.y + Math.floor(idle / 2) * 20, label, `${w.worker_id}: idle at the start point`);
+      idle++;
+    }
   });
+  packers.forEach((w, i) => {
+    live.add(w.worker_id);
+    const busy = (byWorker.get(w.worker_id) || []).filter((t) => t.task_type === "PACK").length;
+    placeMarker(w.worker_id, "packing", STATION.x + 22 + i * 24, STATION.packY + 42, String(i + 1), `${w.worker_id}: ${busy ? `packing ${busy} order(s)` : "idle"}`);
+  });
+  for (const [id, g] of markers) if (!live.has(id)) { g.remove(); markers.delete(id); }
+  const dispatched = lastFloor ? lastFloor.orders.dispatched : null;
+  $("map-note").textContent = dispatched != null ? `${fmt(dispatched)} orders through the dispatch dock so far` : "";
 }
 
-// ------------------------------------------------------------------ workers
-let knownWorkers = null;        // ids seen in the last refresh
-const changes = new Map();      // id -> {kind: "joined"|"left", at, worker}
+// ------------------------------------------------------------------ warehouse: workers
+let known = null; const events = load("wh-worker-log", []); const samples = [];
+function logEvent(kind, text) { events.unshift({ t: Date.now(), kind, text }); events.length = Math.min(events.length, 60); store("wh-worker-log", events); }
 async function refreshWorkers() {
   try {
     const result = await api(API.workers);
     if (result.status !== 200) return;
-    const workers = result.body.workers || [];
-    const ids = new Set(workers.map((w) => w.worker_id));
-    const now = Date.now();
-    if (knownWorkers) {
-      for (const w of workers) if (!knownWorkers.has(w.worker_id)) changes.set(w.worker_id, { kind: "joined", at: now, worker: w });
-      for (const [id, w] of knownWorkers) if (!ids.has(id)) changes.set(id, { kind: "left", at: now, worker: w });
+    workerList = (result.body.workers || []).slice().sort((a, b) => a.capability.localeCompare(b.capability) || a.worker_id.localeCompare(b.worker_id));
+    const ids = new Map(workerList.map((w) => [w.worker_id, w]));
+    if (known) {
+      for (const [id, w] of ids) if (!known.has(id)) logEvent("j", `${w.capability} pod ${shortId(id)} joined`);
+      for (const [id, w] of known) if (!ids.has(id)) logEvent("l", `${w.capability} pod ${shortId(id)} left`);
     }
-    knownWorkers = new Map(workers.map((w) => [w.worker_id, w]));
-    for (const [id, c] of changes) if (now - c.at > 20000) changes.delete(id);
-
-    $("n-pickers").textContent = workers.filter((w) => w.capability === "picking").length;
-    $("n-packers").textContent = workers.filter((w) => w.capability === "packing").length;
-    $("n-slots").textContent = workers.reduce((sum, w) => sum + (w.slots || 0), 0);
-
-    const shown = [...workers];
-    for (const [id, c] of changes) if (c.kind === "left" && !ids.has(id)) shown.push(c.worker);
-    shown.sort((a, b) => a.capability.localeCompare(b.capability) || a.worker_id.localeCompare(b.worker_id));
-    const items = shown.map((w) => {
-      const c = changes.get(w.worker_id);
-      const state = c && (c.kind === "left" ? !ids.has(w.worker_id) : true) ? c.kind : "";
-      return el("div", { class: `worker ${state}` },
-        el("span", { class: `kind ${w.capability}`, text: w.capability }),
-        el("span", { class: "who" },
-          el("span", { class: "name mono", title: w.worker_id, text: w.worker_id }),
-          el("span", { class: "where", text: `zones ${w.zones.join(" ")} · ${w.slots} slots` })),
-        state ? el("span", { class: "tag", text: state }) : null);
-    });
-    $("workers").replaceChildren(...(items.length ? items : [el("div", { class: "empty", text: "No workers registered." })]));
+    known = ids;
+    samples.push({ t: Date.now(), pick: workerList.filter((w) => w.capability === "picking").length });
+    while (samples.length && Date.now() - samples[0].t > 15 * 60 * 1000) samples.shift();
+    if (view === "warehouse") { renderWorkers(); renderMap(); }
   } catch (_) { /* shown in the header */ }
 }
+function renderWorkers() {
+  const tasks = (lastFloor && lastFloor.tasks) || [];
+  const pick = workerList.filter((w) => w.capability === "picking").length, pack = workerList.length - pick;
+  const busy = new Set(tasks.map((t) => t.worker_id));
+  $("n-pick").textContent = pick; $("n-pack").textContent = pack;
+  $("n-busy").textContent = workerList.filter((w) => busy.has(w.worker_id)).length;
+  $("k-workers").textContent = `${pick} · ${pack}`;
+  const recent = new Set(events.filter((e) => e.kind === "j" && Date.now() - e.t < 60000).map((e) => e.text));
+  const seq = { picking: 0, packing: 0 };
+  $("wlist").replaceChildren(...workerList.map((w) => {
+    const mineT = tasks.filter((t) => t.worker_id === w.worker_id);
+    const zones = [...new Set(mineT.map((t) => t.zone))].join(", ");
+    const st = mineT.length ? `${w.capability === "picking" ? "Picking" : "Packing"} ${mineT.length} of ${w.slots} slots${zones && w.capability === "picking" ? ` · zone ${zones}` : ""}` : `Idle · ${w.slots} slots free`;
+    const joined = [...recent].some((t) => t.includes(shortId(w.worker_id)));
+    const n = ++seq[w.capability];
+    return el("div", { class: `w${joined ? " joined" : ""}` }, el("span", { class: `k ${w.capability}`, text: `${w.capability === "picking" ? "Picker" : "Packer"} ${n}` }),
+      el("span", { class: "id mono", title: w.worker_id, text: w.worker_id }), el("span", { class: "st", text: st }));
+  }));
+  $("wlog").replaceChildren(...(events.length ? events.slice(0, 30).map((e) => el("div", { class: e.kind }, el("span", { class: "muted num", text: `${clockS(e.t)} ` }), e.text))
+    : [el("div", { class: "muted", text: "Pods joining or leaving are logged here." })]));
+  drawSpark();
+}
+function drawSpark() {
+  const s = $("spark"); s.replaceChildren();
+  if (samples.length < 2) return;
+  const t0 = Date.now() - 15 * 60 * 1000, maxN = Math.max(6, ...samples.map((x) => x.pick));
+  const X = (t) => ((t - t0) / (15 * 60 * 1000)) * 300, Y = (n) => 52 - (n / maxN) * 46;
+  let d = `M${X(samples[0].t)},${Y(samples[0].pick)}`;
+  for (let i = 1; i < samples.length; i++) d += `H${X(samples[i].t)}V${Y(samples[i].pick)}`;
+  d += `H${X(Date.now())}`;
+  s.append(svg("path", { d: d + `V52H${X(samples[0].t)}Z`, fill: "var(--pick-soft)" }), svg("path", { d, fill: "none", stroke: "var(--pick)", "stroke-width": 2, "vector-effect": "non-scaling-stroke" }));
+  $("spark-cap").textContent = `Pickers over the last 15 minutes: now ${samples[samples.length - 1].pick}, most ${Math.max(...samples.map((x) => x.pick))}`;
+}
 
-// ------------------------------------------------------------------ analytics
-async function refreshAnalytics() {
+// ------------------------------------------------------------------ warehouse: floor, KPIs, all orders
+async function refreshFloor() {
   try {
-    const result = await api(API.analytics);
+    const result = await api(API.floor);
     if (result.status !== 200) return;
-    const order = ["A", "B", "C", "P", "D"];
-    const windows = (result.body.windows || []).slice().sort((a, b) => order.indexOf(a.zone) - order.indexOf(b.zone));
-    if (!windows.length) {
-      $("analytics-body").replaceChildren(el("tr", {}, el("td", { colspan: "11", class: "empty", text: "No windows yet. Flink publishes one per zone each minute while orders flow." })));
-      $("window-meta").textContent = "";
-      return;
-    }
-    const newest = Math.max(...windows.map((w) => w.window_end));
-    const stale = Date.now() - newest > 5 * 60 * 1000;
-    $("window-meta").className = "window-meta" + (stale ? " stale" : "");
-    $("window-meta").textContent = stale
-      ? `Latest window ended ${ago(newest)}. New windows appear about a minute after orders flow.`
-      : `Latest window ended ${ago(newest)}`;
-    $("analytics-body").replaceChildren(...windows.map((w) => el("tr", {},
-      el("td", { text: ZONE_NAMES[w.zone] || w.zone }),
-      el("td", { class: "r num", text: fmt(w.tasks_created) }), el("td", { class: "r num", text: fmt(w.picks_completed) }),
-      el("td", { class: "r num", text: fmt(w.packs_completed) }), el("td", { class: "r num", text: fmt(w.dispatched) }),
-      el("td", { class: "r num", text: fmt(w.tasks_abandoned) }), el("td", { class: "r num", text: fmt(w.tasks_reclaimed) }),
-      el("td", { class: "r num", text: fmt(w.active_workers) }), el("td", { class: "r num", text: fmt(w.queue_depth) }),
-      el("td", { class: "r num", text: w.mean_recovery_ms ? `${(w.mean_recovery_ms / 1000).toFixed(1)} s` : "–" }),
-      el("td", { class: "muted num", text: `${clock(w.window_start)}–${clock(w.window_end)}` }))));
+    lastFloor = result.body;
+    $("k-open").textContent = fmt(lastFloor.orders.open);
+    $("k-done").textContent = fmt(lastFloor.orders.dispatched);
+    const w = lastFloor.waiting || {};
+    $("k-wait").textContent = fmt((w.PICK || 0) + (w.PACK || 0));
+    renderMap(); renderWorkers();
+  } catch (_) { /* shown in the header */ }
+}
+async function refreshAll() {
+  try {
+    const result = await api(`${API.orders}?limit=100`);
+    if (result.status !== 200) return;
+    const orders = result.body.orders || [];
+    const counts = {};
+    for (const o of orders) { const s = (o.fulfilment && o.fulfilment.status) || "ACCEPTED"; counts[s] = (counts[s] || 0) + 1; }
+    $("all-chips").replaceChildren(...["ACCEPTED", "PICKING", "PACKING", "PACKED", "DISPATCHED"].filter((s) => counts[s]).map((s) => el("span", { class: "chip" }, el("span", { class: `pill s-${s}`, text: s }), ` ${counts[s]}`)));
+    const box = $("all-body").closest(".all-orders"), top = box.scrollTop;
+    $("all-body").replaceChildren(...(orders.length ? orders.map((o) => {
+      const f = o.fulfilment || {}, s = f.status || "ACCEPTED";
+      const pct = f.tasks_total ? (100 * f.tasks_done) / f.tasks_total : 0;
+      return el("tr", {},
+        el("td", { class: "num", text: clockS(Date.parse(o.created_at)) }), el("td", { class: "mono", text: o.order_id }),
+        el("td", { text: o.customer }), el("td", { class: "r num", text: o.lines.length }),
+        el("td", { text: SPEEDS[o.priority] || `Priority ${o.priority}` }),
+        el("td", {}, el("span", { class: `pill s-${s}`, text: s })),
+        el("td", {}, el("div", { style: "display:flex;gap:8px;align-items:center" }, el("div", { class: "bar" }, el("i", { style: `width:${pct}%` })),
+          el("span", { class: "muted num", text: f.tasks_total ? `${f.tasks_done}/${f.tasks_total}` : "–" }), f.max_attempt > 1 ? el("span", { class: "attempt", text: `attempt ${f.max_attempt}` }) : null)));
+    }) : [el("tr", {}, el("td", { colspan: "7", class: "empty", text: "No orders yet." }))]));
+    box.scrollTop = top;
   } catch (_) { /* shown in the header */ }
 }
 
-// ------------------------------------------------------------------ burst
-let burst = null;
-function burstUi(running) {
-  $("burst-start").disabled = running;
-  $("burst-stop").disabled = !running;
-  $("burst-count").disabled = running;
-  $("burst-rate").disabled = running;
+// ------------------------------------------------------------------ warehouse: charts
+function chart(container, { title, times, stacks = [], lines = [], unit = "" }) {
+  const W = 560, H = 210, L = 40, R = 10, T = 12, B = 26, iw = W - L - R, ih = H - T - B;
+  const n = times.length;
+  const totals = times.map((_, i) => stacks.reduce((s, x) => s + (x.values[i] || 0), 0));
+  const maxV = Math.max(1, ...totals, ...lines.flatMap((l) => l.values));
+  const nice = (v) => { const p = 10 ** Math.floor(Math.log10(v)); return Math.ceil(v / p / (v / p > 5 ? 2 : 1)) * p * (v / p > 5 ? 2 : 1); };
+  const top = Math.max(4, nice(maxV));
+  const X = (i) => L + (n <= 1 ? iw / 2 : (i + 0.5) * (iw / n)), Y = (v) => T + ih - (v / top) * ih, bw = Math.max(2, (iw / Math.max(n, 1)) * 0.7);
+  const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": title });
+  for (let g = 0; g <= 4; g++) {
+    const v = (top / 4) * g, y = Y(v);
+    s.append(svg("line", { x1: L, x2: W - R, y1: y, y2: y, class: g ? "grid" : "axis" }), svg("text", { x: L - 6, y: y + 3.5, "text-anchor": "end" }, fmt(Math.round(v))));
+  }
+  times.forEach((t, i) => { if (i % 5 === 0 || i === n - 1) s.append(svg("text", { x: X(i), y: H - 8, "text-anchor": "middle" }, clock(t))); });
+  times.forEach((t, i) => {
+    let acc = 0;
+    for (const st of stacks) {
+      const v = st.values[i] || 0; if (!v) continue;
+      s.append(svg("rect", { x: X(i) - bw / 2, y: Y(acc + v), width: bw, height: Math.max(0.5, Y(acc) - Y(acc + v)), fill: st.colour, rx: 1 }, svg("title", {}, `${clock(t)} · ${st.name}: ${fmt(v)}${unit}`)));
+      acc += v;
+    }
+  });
+  for (const ln of lines) {
+    if (!ln.values.length) continue;
+    const d = ln.values.map((v, i) => `${i ? "L" : "M"}${X(i)},${Y(v)}`).join("");
+    s.append(svg("path", { d, fill: "none", stroke: ln.colour, "stroke-width": 2.2, "stroke-linejoin": "round" }));
+    const last = ln.values.length - 1;
+    s.append(svg("circle", { cx: X(last), cy: Y(ln.values[last]), r: 3.5, fill: ln.colour }, svg("title", {}, `${ln.name}: ${fmt(ln.values[last])}`)));
+  }
+  const keys = el("div", { class: "keys" }, ...[...stacks, ...lines].map((k) => el("span", {}, el("i", { style: `background:${k.colour}` }), k.name)));
+  container.replaceChildren(el("h3", { text: title, style: "font-size:13.5px;margin-bottom:4px" }), s, keys);
 }
-function stopBurst(message) {
-  if (!burst) return;
-  clearInterval(burst.timer);
-  burst = null;
-  burstUi(false);
-  if (message) { $("burst-note").className = "note ok"; $("burst-note").textContent = message; }
+async function refreshCharts() {
+  const zones = [...ZONES, "P", "D"];
+  const results = await Promise.allSettled(zones.map((z) => api(`${API.windows}?zone=${z}&limit=30`)));
+  const byZone = {};
+  zones.forEach((z, i) => { const r = results[i]; byZone[z] = r.status === "fulfilled" && r.value.status === 200 ? r.value.body.windows : []; });
+  const starts = [...new Set(Object.values(byZone).flat().map((w) => w.window_start))].sort((a, b) => a - b).slice(-30);
+  if (!starts.length) {
+    for (const id of ["c-throughput", "c-queue", "c-workers", "c-failures"]) $(id).replaceChildren(el("div", { class: "empty", text: "No windows yet. Flink publishes one per zone every minute while orders flow." }));
+    return;
+  }
+  const get = (z, key) => starts.map((t) => { const w = byZone[z].find((x) => x.window_start === t); return w ? w[key] || 0 : 0; });
+  const newest = Math.max(...Object.values(byZone).flat().map((w) => w.window_end));
+  $("stale").textContent = Date.now() - newest > 5 * 60 * 1000 ? `Newest window ended ${ago(newest)}; new windows appear about a minute after orders flow.` : "";
+  const zc = { A: "var(--zone-a)", B: "var(--zone-b)", C: "var(--zone-c)" };
+  chart($("c-throughput"), { title: "Items picked per minute, by zone, and orders dispatched", times: starts,
+    stacks: ZONES.map((z) => ({ name: `Zone ${z} picks`, colour: zc[z], values: get(z, "picks_completed") })),
+    lines: [{ name: "Orders dispatched", colour: "var(--fg)", values: get("D", "dispatched") }] });
+  chart($("c-queue"), { title: "Pick tasks waiting at the end of each minute", times: starts,
+    stacks: ZONES.map((z) => ({ name: `Zone ${z}`, colour: zc[z], values: get(z, "queue_depth") })) });
+  const pickers = starts.map((_, i) => Math.max(...ZONES.map((z) => get(z, "active_workers")[i])));
+  chart($("c-workers"), { title: "Workers active each minute", times: starts,
+    lines: [{ name: "Pickers (busiest zone)", colour: "var(--pick)", values: pickers }, { name: "Packers", colour: "var(--pack)", values: get("P", "active_workers") }] });
+  const sum = (key) => starts.map((_, i) => ZONES.reduce((s, z) => s + get(z, key)[i], 0));
+  const reclaimed = sum("tasks_reclaimed");
+  chart($("c-failures"), { title: "Failed tasks: abandoned by a worker, then reclaimed", times: starts,
+    stacks: [{ name: "Abandoned", colour: "var(--bad)", values: sum("tasks_abandoned") }],
+    lines: [{ name: "Reclaimed", colour: "var(--ok)", values: reclaimed }] });
+  const picks = sum("picks_completed");
+  $("k-picks").textContent = fmt(picks.length > 1 ? picks[picks.length - 2] : picks[0]);
+  $("k-reclaimed").textContent = fmt(reclaimed.reduce((a, b) => a + b, 0));
 }
-$("burst-start").addEventListener("click", () => {
-  const total = Math.min(300, Math.max(1, Math.round(Number($("burst-count").value) || 0)));
-  const rate = Math.min(20, Math.max(1, Math.round(Number($("burst-rate").value) || 0)));
-  $("burst-count").value = total; $("burst-rate").value = rate;
-  burst = { total, sent: 0, ok: 0, bad: 0, tracked: 0, timer: null };
-  for (const id of ["burst-sent", "burst-ok", "burst-bad"]) $(id).textContent = "0";
-  $("burst-bar").style.width = "0";
-  $("burst-note").className = "note"; $("burst-note").textContent = "";
-  burstUi(true);
-  const b = burst;
-  b.timer = setInterval(async () => {
-    if (burst !== b) return;
-    if (b.sent >= b.total) { clearInterval(b.timer); return; }
-    b.sent += 1;
-    $("burst-sent").textContent = b.sent;
-    $("burst-bar").style.width = `${(100 * b.sent) / b.total}%`;
-    const lines = randomLines().map((l) => ({ sku: sku(l.zone, l.number), quantity: l.quantity }));
-    try {
-      const result = await placeOrder({ customer: "burst", priority: randInt(0, 2), lines });
-      if (result.status === 202 || result.status === 200) {
-        b.ok += 1;
-        if (b.tracked < 3) { b.tracked += 1; track(result.body.order_id, "burst", true); }
-      } else {
-        b.bad += 1;
-        $("burst-note").className = "note bad"; $("burst-note").textContent = errorText(result);
-      }
-    } catch (_) { b.bad += 1; }
-    $("burst-ok").textContent = b.ok; $("burst-bad").textContent = b.bad;
-    if (b.ok + b.bad >= b.total && burst === b) stopBurst(`Done: ${b.ok} of ${b.total} orders accepted.`);
-  }, 1000 / rate);
-});
-$("burst-stop").addEventListener("click", () => {
-  const b = burst;
-  stopBurst(b ? `Stopped after ${b.sent} orders.` : "");
-});
 
-// ------------------------------------------------------------------ start
-setRandomOrder();
-renderOrders();
-function every(ms, fn) { fn(); setInterval(() => { if (!document.hidden) fn(); }, ms); }
-every(2000, pollOrders);
-every(4000, refreshWorkers);
-every(5000, refreshStock);
-every(10000, refreshAnalytics);
+// ------------------------------------------------------------------ warehouse: load
+let run = null;
+function loadUi(running) {
+  $("l-start").disabled = running; $("l-stop").disabled = !running;
+  for (const b of document.querySelectorAll(".preset")) b.disabled = running;
+}
+function stopLoad(message) {
+  if (!run) return;
+  clearInterval(run.timer); clearInterval(run.clock);
+  const r = run; run = null; loadUi(false);
+  $("l-msg").className = "msg"; $("l-msg").textContent = message || `Finished: ${fmt(r.ok)} of ${fmt(r.sent)} orders accepted.`;
+}
+function startLoad(rate, seconds) {
+  if (run) return;
+  rate = Math.min(25, Math.max(1, Math.round(rate))); seconds = Math.min(600, Math.max(5, Math.round(seconds)));
+  const total = rate * seconds;
+  const r = { total, sent: 0, ok: 0, bad: 0, inflight: 0, began: Date.now() };
+  run = r; loadUi(true); $("l-msg").textContent = ""; $("l-msg").className = "msg";
+  const paint = () => {
+    $("l-sent").textContent = fmt(r.sent); $("l-ok").textContent = fmt(r.ok); $("l-bad").textContent = fmt(r.bad);
+    $("l-bar").style.width = `${(100 * r.sent) / r.total}%`;
+    $("l-time").textContent = `${Math.round((Date.now() - r.began) / 1000)} of ${seconds} s`;
+  };
+  r.clock = setInterval(paint, 500);
+  r.timer = setInterval(async () => {
+    if (run !== r) return;
+    if (r.sent >= r.total) { clearInterval(r.timer); return; }
+    if (r.inflight > 40) return;   // the warehouse is slower than the rate: skip, do not pile up
+    r.sent += 1; r.inflight += 1;
+    const zones = ZONES.filter(() => Math.random() < 0.6);
+    const lines = (zones.length ? zones : ["A"]).map((z) => ({ sku: `SKU-${z}${String(randInt(0, 99)).padStart(3, "0")}`, quantity: randInt(1, 3) }));
+    try {
+      const result = await api(API.orders, { method: "POST", body: JSON.stringify({ customer: "load generator", priority: randInt(0, 2), lines }) });
+      if (result.status === 202 || result.status === 200) r.ok += 1;
+      else { r.bad += 1; $("l-msg").className = "msg bad"; $("l-msg").textContent = errorText(result); }
+    } catch (_) { r.bad += 1; }
+    r.inflight -= 1;
+    if (r.ok + r.bad >= r.total && run === r) { paint(); stopLoad(); }
+  }, 1000 / rate);
+}
+for (const b of document.querySelectorAll(".preset")) b.addEventListener("click", () => startLoad(Number(b.dataset.rate), Number(b.dataset.seconds)));
+$("l-start").addEventListener("click", () => startLoad(Number($("l-rate").value), Number($("l-secs").value)));
+$("l-stop").addEventListener("click", () => stopLoad(run ? `Stopped after ${fmt(run.sent)} orders.` : ""));
+
+// ------------------------------------------------------------------ refresh loop
+function refreshNow() {
+  if (view === "shop") refreshStock();
+  if (view === "orders") refreshMine();
+  if (view === "warehouse") { renderWorkers(); refreshFloor(); refreshAll(); refreshCharts(); }
+}
+function every(ms, fn, always) { setInterval(() => { if (always || !document.hidden) fn(); }, ms); }
+every(10000, () => view === "shop" && refreshStock());
+every(3000, () => view === "orders" && refreshMine());
+every(2000, () => view === "warehouse" && refreshFloor());
+every(4000, () => view === "warehouse" && refreshAll());
+every(15000, () => view === "warehouse" && refreshCharts());
+every(4000, refreshWorkers, true);   // always, so joins and leaves are logged on every view
+
+// For scripts/console_dev.py, which drives the page to take screenshots.
+window.consoleDemo = {
+  track: (id) => remember(id, {}),
+  burst: (n) => startLoad(Math.min(25, n), 1),
+  fillCart: () => { cart = { "SKU-A013": 2, "SKU-B047": 1, "SKU-C062": 3 }; saveCart(); openCart(true); },
+};
+
+renderWho(); saveCart(); saveMine(); refreshWorkers(); route();
+if (Object.keys(stock).length === 0 && view !== "shop") refreshStock();
 </script>
 </body>
 </html>

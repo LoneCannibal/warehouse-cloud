@@ -13,7 +13,7 @@ from pathlib import Path
 
 import grpc
 import httpx
-from fastapi import Header, HTTPException, Response
+from fastapi import Header, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
@@ -136,6 +136,57 @@ def create_order(
     )
     log.info("order accepted", extra={"order_id": order_id})
     return {"order_id": order_id, "status": "ACCEPTED"}
+
+
+@app.get("/v1/orders")
+def list_orders(ids: str | None = Query(default=None, max_length=4000), limit: int = Query(default=50, ge=1, le=100)) -> dict:
+    """Recent orders from every customer, or the orders named in ids (up to 100), each
+    with its fulfilment status from the Job Scheduler in one batched call."""
+    with state["pool"].connection() as conn:
+        if ids:
+            wanted = [order_id for order_id in ids.split(",") if order_id][:100]
+            orders = conn.execute(
+                "SELECT order_id, customer, priority, lines, created_at FROM orders.orders"
+                " WHERE order_id = ANY(%s) ORDER BY created_at DESC",
+                (wanted,),
+            ).fetchall()
+        else:
+            orders = conn.execute(
+                "SELECT order_id, customer, priority, lines, created_at FROM orders.orders"
+                " ORDER BY created_at DESC LIMIT %s",
+                (limit,),
+            ).fetchall()
+    if not orders:
+        return {"orders": []}
+    try:
+        reply = state["scheduler"].get("/v1/orders/status", params={"ids": ",".join(o["order_id"] for o in orders)})
+        reply.raise_for_status()
+        statuses = {status["order_id"]: status for status in reply.json()["orders"]}
+    except httpx.HTTPError:
+        # The orders themselves are still readable, so this degrades instead of failing.
+        log.warning("scheduler unavailable")
+        statuses = None
+    for order in orders:
+        if statuses is None:
+            order["fulfilment"] = None
+        else:
+            # Not known to the scheduler yet: the order event is still in Kafka.
+            order["fulfilment"] = statuses.get(order["order_id"]) or {
+                "order_id": order["order_id"], "status": "ACCEPTED", "tasks_total": 0,
+                "tasks_done": 0, "max_attempt": 1, "dispatched_at": None,
+            }
+    return {"orders": orders}
+
+
+@app.get("/v1/floor")
+def floor() -> dict:
+    """The Job Scheduler's view of the warehouse floor, for the Warehouse Console's map."""
+    try:
+        reply = state["scheduler"].get("/v1/floor")
+        reply.raise_for_status()
+        return reply.json()
+    except httpx.HTTPError as error:
+        raise HTTPException(status_code=503, detail="the Job Scheduler is unavailable") from error
 
 
 @app.get("/v1/orders/{order_id}")

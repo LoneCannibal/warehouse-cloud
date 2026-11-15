@@ -257,6 +257,77 @@ class TaskStore:
             ).fetchall()
         return {"order_id": order_id, "status": _order_status(order, tasks), "tasks": tasks}
 
+    def order_statuses(self, order_ids: list[str]) -> list[dict]:
+        """Status and task progress for several orders in two queries, for order lists."""
+        if not order_ids:
+            return []
+        with self._pool.connection() as conn:
+            orders = conn.execute(
+                "SELECT order_id, dispatched_at FROM scheduler.orders WHERE order_id = ANY(%s)",
+                (order_ids,),
+            ).fetchall()
+            tasks = conn.execute(
+                """
+                SELECT order_id, task_type, status, attempt
+                FROM scheduler.tasks WHERE order_id = ANY(%s) ORDER BY created_at
+                """,
+                (order_ids,),
+            ).fetchall()
+        by_order: dict[str, list[dict]] = {}
+        for task in tasks:
+            by_order.setdefault(task["order_id"], []).append(task)
+        result = []
+        for order in orders:
+            order_tasks = by_order.get(order["order_id"], [])
+            result.append(
+                {
+                    "order_id": order["order_id"],
+                    "status": _order_status(order, order_tasks),
+                    "tasks_total": len(order_tasks),
+                    "tasks_done": sum(task["status"] == "DONE" for task in order_tasks),
+                    "max_attempt": max((task["attempt"] for task in order_tasks), default=1),
+                    "dispatched_at": order["dispatched_at"],
+                }
+            )
+        return result
+
+    def floor(self) -> dict:
+        """What the warehouse floor is doing now: each assigned task with its worker and
+        the bins it visits, the tasks still waiting, and how many orders are open."""
+        with self._pool.connection() as conn:
+            tasks = conn.execute(
+                """
+                SELECT task_id, order_id, task_type, zone, worker_id, attempt, lines
+                FROM scheduler.tasks WHERE status = 'ASSIGNED' ORDER BY assigned_at LIMIT 300
+                """
+            ).fetchall()
+            waiting = conn.execute(
+                "SELECT task_type, count(*) AS n FROM scheduler.tasks WHERE status = 'PENDING' GROUP BY task_type"
+            ).fetchall()
+            orders = conn.execute(
+                """
+                SELECT count(*) FILTER (WHERE dispatched_at IS NULL) AS open,
+                       count(*) FILTER (WHERE dispatched_at IS NOT NULL) AS dispatched
+                FROM scheduler.orders
+                """
+            ).fetchone()
+        return {
+            "tasks": [
+                {
+                    "task_id": task["task_id"],
+                    "order_id": task["order_id"],
+                    "task_type": task["task_type"],
+                    "zone": task["zone"],
+                    "worker_id": task["worker_id"],
+                    "attempt": task["attempt"],
+                    "bins": [line["bin"] for line in task["lines"] if line.get("bin")],
+                }
+                for task in tasks
+            ],
+            "waiting": {row["task_type"]: row["n"] for row in waiting},
+            "orders": {"open": orders["open"], "dispatched": orders["dispatched"]},
+        }
+
     def queue_depth(self) -> dict[str, int]:
         with self._pool.connection() as conn:
             rows = conn.execute(

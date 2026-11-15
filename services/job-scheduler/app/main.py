@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Query
 from prometheus_client import Counter
 
 from app.leader import Leader
@@ -84,6 +84,18 @@ async def lifespan(_app):
 
 
 app = create_app(settings.service, lifespan)
+
+
+@app.get("/v1/orders/status")
+def order_statuses(ids: str = Query(min_length=1, max_length=4000)) -> dict:
+    """Up to 100 orders' status at once, for the Warehouse Console's order lists."""
+    order_ids = [order_id for order_id in ids.split(",") if order_id][:100]
+    return {"orders": state["store"].order_statuses(order_ids)}
+
+
+@app.get("/v1/floor")
+def floor() -> dict:
+    return state["store"].floor()
 
 
 @app.get("/v1/orders/{order_id}/tasks")

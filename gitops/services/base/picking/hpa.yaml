@@ -20,5 +20,7 @@ spec:
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 15
+    # Added pods stay three minutes after the load drops, so a scale-out can be seen on
+    # the dashboards and the console; at 60 s they vanished before anyone could look.
     scaleDown:
-      stabilizationWindowSeconds: 60
+      stabilizationWindowSeconds: 180

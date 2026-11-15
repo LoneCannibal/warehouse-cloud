@@ -53,7 +53,7 @@ Everything runs in one Google Cloud project in `asia-south1` (Mumbai), chosen fo
 | Service | Responsibility | Runs on | Data it owns |
 |---|---|---|---|
 | Inventory | Tracks stock. Reserves and releases it atomically, and confirms picks once only. | GKE | Cloud SQL `inventory` schema |
-| Order Intake | Public API. Validates orders, reserves stock, and publishes accepted orders. Also serves the Warehouse Console, a single web page that drives the public API. | GKE, with HPA | Cloud SQL `orders` schema |
+| Order Intake | Public API. Validates orders, reserves stock, and publishes accepted orders. Also serves the web front end: a shop, order tracking and a warehouse view, in one page that uses only the public API. | GKE, with HPA | Cloud SQL `orders` schema |
 | Job Scheduler | Creates tasks, assigns them to workers, manages leases, reclaims abandoned work. | GKE, 3 replicas | Cloud SQL `scheduler` schema |
 | Worker Registry | Tracks which workers are live and what they can do. | GKE | Firestore `workers`, Cloud SQL `workers` schema |
 | Picking | Runs picking tasks: plans a route, confirms the pick. | GKE, with HPA | None |
@@ -71,7 +71,7 @@ Each mechanism was chosen for what that particular call needs.
 
 | Mechanism | Used between | Why this mechanism |
 |---|---|---|
-| **REST** | Clients and the Warehouse Console page to Order Intake, Inventory's stock list, Analytics and Worker Registry; Order Intake to Job Scheduler | Universal for public APIs, easy to call and inspect, and callable straight from a browser |
+| **REST** | Clients and the web front end to Order Intake, Inventory's stock list, Analytics and Worker Registry; Order Intake to Job Scheduler, including the order and floor views behind the front end | Universal for public APIs, easy to call and inspect, and callable straight from a browser |
 | **gRPC** | Order Intake and Picking to Inventory, Job Scheduler to Worker Registry, workers to Job Scheduler | A typed contract and low latency, for calls where the caller must have the answer before it continues |
 | **Kafka** | Order Intake to Job Scheduler, all services to Flink, Flink to Analytics | Durable, replayable, many consumers, and it decouples a burst of orders from assignment speed |
 | **Cloud Storage and Pub/Sub** | Packing to Dispatch | Turns a file upload into a retried event, with a dead-letter topic for one that keeps failing |

@@ -101,12 +101,16 @@ def confirm_pick(pool: ConnectionPool, task_id: str, lines: list[tuple[str, int]
 
 
 def list_stock(pool: ConnectionPool, zone: str, limit: int) -> list[dict]:
-    """The first products in one zone, in SKU order. Used by the Warehouse Console."""
+    """The first products in one zone, in SKU order, for the Warehouse Console.
+
+    picked is how many units have left the shelf since the stock was seeded. It comes
+    from the database, so it is the same in every browser and survives a reload.
+    """
     with pool.connection() as conn:
         return conn.execute(
-            "SELECT sku, name, zone, bin, on_hand, reserved FROM inventory.stock"
-            " WHERE zone = %s ORDER BY sku LIMIT %s",
-            (zone, limit),
+            "SELECT sku, name, zone, bin, on_hand, reserved, GREATEST(%s - on_hand, 0) AS picked"
+            " FROM inventory.stock WHERE zone = %s ORDER BY sku LIMIT %s",
+            (SEED_ON_HAND, zone, limit),
         ).fetchall()
 
 

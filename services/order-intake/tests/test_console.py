@@ -35,7 +35,7 @@ def test_the_root_serves_the_console():
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "<title>Warehouse Console</title>" in response.text
+    assert "<title>Smart Warehouse</title>" in response.text
 
 
 def test_the_load_balancer_sends_the_root_to_order_intake():
@@ -45,12 +45,14 @@ def test_the_load_balancer_sends_the_root_to_order_intake():
 def test_the_page_calls_only_routes_the_load_balancer_exposes():
     routes = dict(re.findall(r'(\w+): "(/v1/[^"]*)"', PAGE.split("const API = {", 1)[1].split("};", 1)[0]))
 
-    assert set(routes) == {"orders", "workers", "analytics", "stock"}
+    assert set(routes) == {"orders", "floor", "workers", "analytics", "windows", "stock"}
     for path in routes.values():
         assert exposed(path), path
     # Reading one order and listing stock add a suffix or a query to the base route.
     assert exposed(routes["orders"] + "/ord-1234")
-    assert exposed(routes["stock"] + "?zone=A&limit=12")
+    assert exposed(routes["stock"] + "?zone=A&limit=100")
+    assert exposed(routes["orders"] + "?ids=ord-1,ord-2")
+    assert exposed(routes["windows"] + "?zone=A&limit=30")
 
 
 def test_private_routes_stay_private():
@@ -60,4 +62,6 @@ def test_private_routes_stay_private():
 
 def test_the_page_needs_nothing_from_another_site():
     assert not re.search(r'(src|href)="https?://', PAGE)
-    assert "fetch(path" in PAGE and "http://" not in PAGE.split("<script>", 1)[1]
+    script = PAGE.split("<script>", 1)[1].replace('"http://www.w3.org/2000/svg"', "")  # a name, not a request
+    assert "fetch(path" in PAGE
+    assert not re.search(r"https?://", script)

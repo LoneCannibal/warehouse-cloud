@@ -17,7 +17,7 @@ Project `g18-warehouse-3c6b` in `asia-south1`, on the group's credit. Evidence f
 | Kafka topics | Created with replication factor 3 at the minimum cluster size | |
 | Argo CD | All 5 Applications Synced and Healthy; it read the private repository with a read-only deploy key | |
 | Pods | All 18 in `warehouse` Ready with no restarts: Cloud SQL over its private address, ZooKeeper quorum, Kafka sign-in through Workload Identity | |
-| Public URL | An order through the load balancer reached DISPATCHED. `/chaos`, `/health`, `/metrics` and `/docs` are not exposed; `/` serves the Warehouse Console page | `smoke-public-url.txt` |
+| Public URL | An order through the load balancer reached DISPATCHED. `/chaos`, `/health`, `/metrics` and `/docs` are not exposed; `/` serves the web front end | `smoke-public-url.txt` |
 | Warehouse Console (15 November) | Through the load balancer, `/` served the page, `/v1/stock` listed live stock and rejected a bad zone with 422, the page showed the real workers, stock and analytics, and `make smoke` passed. `/health`, `/metrics`, `/docs` and `/chaos/hang` still returned 404 | |
 | Load test | 16,905 orders at 35 a second from India over the internet: failure rate 0.0001, p95 531 ms | `k6-summary.json` |
 | HPA | Picking scaled from 2 to 6 pods and Order Intake from 2 to 4 within two minutes, then back down | `hpa-during-load.txt` |

@@ -63,3 +63,10 @@ spec:
                 name: inventory
                 port:
                   name: http
+          - path: /v1/floor
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: order-intake
+                port:
+                  name: http

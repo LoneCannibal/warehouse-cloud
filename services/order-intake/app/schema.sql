@@ -8,3 +8,6 @@ CREATE TABLE IF NOT EXISTS orders.orders (
     lines            jsonb NOT NULL,
     created_at       timestamptz NOT NULL DEFAULT now()
 );
+
+-- The Warehouse Console lists the newest orders first.
+CREATE INDEX IF NOT EXISTS orders_created_idx ON orders.orders (created_at DESC);
