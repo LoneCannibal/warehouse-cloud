@@ -376,7 +376,7 @@ aside.cart { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100
 
       <div class="card pad full">
         <div class="sect-head">
-          <div><h3>Analytics</h3><p class="hint">Flink on Dataproc counts task events in 1-minute windows per zone and publishes them to Kafka; these are the last 30 windows.</p></div>
+          <div><h3>Analytics</h3><p class="hint">Flink on Dataproc counts task events in 1-minute windows per zone and publishes them to Kafka. These charts cover the 30 minutes up to the newest window.</p></div>
           <span class="stale" id="stale"></span>
         </div>
         <div class="charts">
@@ -1001,7 +1001,10 @@ async function refreshCharts() {
   const results = await Promise.allSettled(zones.map((z) => api(`${API.windows}?zone=${z}&limit=30`)));
   const byZone = {};
   zones.forEach((z, i) => { const r = results[i]; byZone[z] = r.status === "fulfilled" && r.value.status === 200 ? r.value.body.windows : []; });
-  const starts = [...new Set(Object.values(byZone).flat().map((w) => w.window_start))].sort((a, b) => a - b).slice(-30);
+  // The last 30 minutes as a continuous axis, ending at the newest window. Minutes with
+  // no window (no orders, or the stack was down) show as gaps, not as squeezed-out time.
+  const newestStart = Math.max(0, ...Object.values(byZone).flat().map((w) => w.window_start));
+  const starts = newestStart ? Array.from({ length: 30 }, (_, i) => newestStart - (29 - i) * 60000) : [];
   if (!starts.length) {
     for (const id of ["c-throughput", "c-queue", "c-workers", "c-failures"]) $(id).replaceChildren(el("div", { class: "empty", text: "No windows yet. Flink publishes one per zone every minute while orders flow." }));
     return;
