@@ -84,7 +84,7 @@ k6 run -e BASE_URL=$BASE_URL -e PEAK_RPS=25 -e RAMP=1m -e HOLD=30m load-tests/or
 
 - `kubectl -n argocd get applications`: every application is Synced and Healthy.
 - `./scripts/chaos.sh status`: a scheduler leader is named, and ZooKeeper shows 1 leader and 2 followers.
-- Open Grafana → Central Logs once with a real `order_id`. This dashboard is the only one not yet viewed in a browser. If its panels are empty, use the Logs Explorer query in section 4 instead.
+- Open Grafana → Central Logs once with a real `order_id`: about 10 lines, from Order Intake to the Dispatch function. If its panels are empty, use the Logs Explorer query in section 4 instead.
 
 ---
 
@@ -256,10 +256,10 @@ Explain the chain: task events → Flink, with 1-minute event-time windows and a
 ((resource.type="k8s_container" AND resource.labels.namespace_name="warehouse")
  OR (resource.type="cloud_run_revision" AND resource.labels.service_name="warehouse-dispatch")
  OR (resource.type="cloud_dataproc_cluster" AND resource.labels.cluster_name="warehouse-analytics"))
-AND jsonPayload.order_id="ord-…"
+AND (jsonPayload.order_id="ord-…" OR jsonPayload.task_id=~"^ord-…[.]")
 ```
 
-One order, followed through Order Intake, the Job Scheduler and the Dispatch function. Then show Flink's own logs:
+One order, followed through Order Intake, the Job Scheduler, each picker and packer (by task id) and the Dispatch function. Then show Flink's own logs:
 
 ```
 resource.type="cloud_dataproc_cluster" AND resource.labels.cluster_name="warehouse-analytics" AND "Completed checkpoint"

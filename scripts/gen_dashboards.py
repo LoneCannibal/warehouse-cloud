@@ -137,7 +137,9 @@ CENTRAL_LOGS = dashboard(
     "warehouse-logs",
     "Central Logs",
     [
-        logs_panel(0, "One order across every service, Flink and Dispatch included", f'({WAREHOUSE_LOGS}) AND jsonPayload.order_id="$order_id"'),
+        # Task lines (assigned, completed) carry only task_id, which starts with the order id.
+        logs_panel(0, "One order across every service, Flink and Dispatch included",
+                   f'({WAREHOUSE_LOGS}) AND (jsonPayload.order_id="$order_id" OR jsonPayload.task_id=~"^$order_id[.]")'),
         logs_panel(1, "Warnings and errors", f"({WAREHOUSE_LOGS}) AND severity>=WARNING"),
         logs_panel(2, "All warehouse logs", WAREHOUSE_LOGS),
     ],
