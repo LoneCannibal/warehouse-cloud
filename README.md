@@ -169,7 +169,7 @@ make flink-jar
 
 ### 8. Bring everything up
 
-Managed Kafka alone takes 20 to 30 minutes, so allow an hour before a demo, and run it on a stable network: Terraform does not retry a failed DNS lookup. For a private repository, `make up` reads Argo CD's read-only deploy key from `../argocd_deploy_key`, outside the repository, or from `DEPLOY_KEY_FILE`.
+Managed Kafka alone takes 20 to 30 minutes, so allow an hour before a demo. If the run is cut off, for example by a lost network connection, run `make up` again: `scripts/recover.sh` finds what the first run created but did not record, adopts it with Terraform `import` blocks, and the apply creates only the rest. For a private repository, `make up` reads Argo CD's read-only deploy key from `../argocd_deploy_key`, outside the repository, or from `DEPLOY_KEY_FILE`.
 
 ```bash
 cp infra/runtime/terraform.tfvars.example infra/runtime/terraform.tfvars   # then edit it

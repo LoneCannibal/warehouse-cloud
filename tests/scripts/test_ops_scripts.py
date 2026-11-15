@@ -394,3 +394,181 @@ def test_unknown_command_shows_usage(sandbox):
 )
 def test_every_shell_script_parses(script):
     assert subprocess.run(["bash", "-n", script], capture_output=True).returncode == 0
+
+
+# ---- recover.sh: carrying on after an interrupted make up --------------------------
+
+
+def stub_recover(sandbox: Sandbox, state=(), gcloud=None, kubectl=None, lock="", sql_suffix="abc123") -> Path:
+    """gcloud and kubectl map a fragment of the command line to what it prints.
+
+    A value may be a list, printed one item per call, the last one repeating, to
+    model a resource Google is still creating.
+    """
+    state_lines = "\\n".join(state)
+    sandbox.stub(
+        "terraform",
+        f'[[ "$*" == *"state list"* ]] && printf "{state_lines}" && exit 0\n'
+        f'[[ "$*" == *"state show"* ]] && echo \'  hex = "{sql_suffix}"\' && exit 0\n'
+        "exit 0",
+    )
+
+    def responder(name: str, table: dict) -> None:
+        lines = []
+        for i, (fragment, output) in enumerate(table.items()):
+            outputs = output if isinstance(output, list) else [output]
+            counter = sandbox.tmp_path / f"{name}-{i}.count"
+            choices = " ".join(f"'{o}'" for o in outputs)
+            lines.append(
+                f'if [[ "$*" == *"{fragment}"* ]]; then\n'
+                f'  n=$(cat "{counter}" 2>/dev/null || echo 0); echo $((n+1)) > "{counter}"\n'
+                f"  outs=({choices}); i=$(( n < ${{#outs[@]}} ? n : ${{#outs[@]}} - 1 ))\n"
+                '  echo "${outs[$i]}"; exit 0\nfi'
+            )
+        # Like the real tools, looking up something that does not exist fails, and
+        # anything else (a delete, get-credentials) succeeds.
+        missing = '[[ "$*" == *describe* || "$*" == *" list"* || "$*" == *" get "* || "$*" == *"storage cat"* ]] && exit 1'
+        sandbox.stub(name, "\n".join(lines) + f"\n{missing}\nexit 0")
+
+    responder("gcloud", {"get-value project": "demo", "storage cat": lock, **(gcloud or {})})
+    responder("kubectl", kubectl or {})
+    sandbox.stub("sleep")
+    return sandbox.tmp_path / "recovered_imports.tf"
+
+
+def run_recover(sandbox: Sandbox, out: Path, *args: str) -> subprocess.CompletedProcess:
+    return sandbox.run(["bash", "scripts/recover.sh", *args], RECOVERED_IMPORTS=str(out))
+
+
+def test_recover_does_nothing_after_a_clean_run(sandbox):
+    out = stub_recover(sandbox)
+
+    result = run_recover(sandbox, out)
+
+    assert result.returncode == 0, result.stderr
+    assert "Nothing left behind" in result.stdout
+    assert not out.exists()
+
+
+def test_recover_adopts_a_cluster_created_after_the_connection_dropped(sandbox):
+    out = stub_recover(
+        sandbox,
+        gcloud={
+            "container clusters describe warehouse": "RUNNING",
+            "node-pools describe default-pool": "default-pool",
+        },
+    )
+
+    result = run_recover(sandbox, out)
+
+    assert result.returncode == 0, result.stderr
+    blocks = out.read_text()
+    assert "to = google_container_cluster.this" in blocks
+    assert 'id = "projects/demo/locations/asia-south1-a/clusters/warehouse"' in blocks
+    # Terraform deletes this pool as the last step of creating a cluster.
+    assert any("node-pools delete default-pool" in call for call in sandbox.calls)
+
+
+def test_recover_leaves_resources_terraform_already_knows_alone(sandbox):
+    out = stub_recover(
+        sandbox,
+        state=["google_container_cluster.this", "google_managed_kafka_cluster.this"],
+        gcloud={"container clusters describe warehouse": "RUNNING", "managed-kafka clusters describe": "ACTIVE"},
+    )
+
+    result = run_recover(sandbox, out)
+
+    assert result.returncode == 0, result.stderr
+    assert not out.exists()
+    assert not any("delete" in call for call in sandbox.calls)
+
+
+def test_recover_waits_for_a_resource_google_is_still_creating(sandbox):
+    out = stub_recover(sandbox, gcloud={"managed-kafka clusters describe": ["CREATING", "CREATING", "ACTIVE"]})
+
+    result = run_recover(sandbox, out)
+
+    assert result.returncode == 0, result.stderr
+    assert "waiting: CREATING" in result.stderr
+    assert sum(call.startswith("sleep") for call in sandbox.calls) == 2
+    assert 'id = "projects/demo/locations/asia-south1/clusters/warehouse"' in out.read_text()
+
+
+def test_recover_deletes_a_dataproc_cluster_terraform_cannot_import(sandbox):
+    out = stub_recover(sandbox, gcloud={"dataproc clusters describe": "RUNNING"})
+
+    result = run_recover(sandbox, out)
+
+    assert result.returncode == 0, result.stderr
+    assert any("dataproc clusters delete warehouse-analytics" in call for call in sandbox.calls)
+    assert not out.exists()
+
+
+def test_recover_finds_the_database_by_the_suffix_in_the_state(sandbox):
+    out = stub_recover(
+        sandbox,
+        gcloud={
+            "sql instances describe warehouse-abc123": "RUNNABLE",
+            "sql databases describe warehouse": "warehouse",
+            "sql users list": "warehouse",
+        },
+    )
+
+    result = run_recover(sandbox, out)
+
+    blocks = out.read_text()
+    assert result.returncode == 0, result.stderr
+    assert 'id = "projects/demo/instances/warehouse-abc123"' in blocks
+    assert 'id = "projects/demo/instances/warehouse-abc123/databases/warehouse"' in blocks
+    assert 'id = "demo/warehouse-abc123/warehouse"' in blocks
+
+
+def test_recover_adopts_kubernetes_objects_and_helm_releases(sandbox):
+    out = stub_recover(
+        sandbox,
+        state=["google_container_cluster.this"],
+        gcloud={"container clusters describe warehouse": "RUNNING"},
+        kubectl={"namespace argocd": "namespace/argocd", "name=argocd": "secret/sh.helm.release.v1.argocd.v1"},
+    )
+
+    result = run_recover(sandbox, out)
+
+    blocks = out.read_text()
+    assert result.returncode == 0, result.stderr
+    assert 'to = kubernetes_namespace_v1.this["argocd"]\n  id = "argocd"' in blocks
+    assert 'to = helm_release.argocd\n  id = "argocd/argocd"' in blocks
+    assert "helm_release.root_application" not in blocks
+
+
+def test_recover_releases_a_lock_left_by_this_computer(sandbox):
+    who = f"{os.environ.get('USER') or subprocess.run(['id', '-un'], capture_output=True, text=True).stdout.strip()}"
+    host = subprocess.run(["hostname"], capture_output=True, text=True).stdout.strip()
+    lock = '{"ID": "1234-abcd", "Who": "%s@%s"}' % (who, host)
+    out = stub_recover(sandbox, lock=lock)
+    sandbox.stub("pgrep", "exit 1")
+
+    result = run_recover(sandbox, out, "--lock-only")
+
+    assert result.returncode == 0, result.stderr
+    assert any("force-unlock -force 1234-abcd" in call for call in sandbox.calls)
+
+
+def test_recover_will_not_release_someone_elses_lock(sandbox):
+    out = stub_recover(sandbox, lock='{"ID": "1234-abcd", "Who": "aman@other-laptop"}')
+    sandbox.stub("pgrep", "exit 1")
+
+    result = run_recover(sandbox, out, "--lock-only")
+
+    assert result.returncode == 1
+    assert "locked by aman@other-laptop" in result.stderr
+    assert not any("force-unlock" in call for call in sandbox.calls)
+
+
+def test_up_adopts_leftovers_before_applying_and_cleans_up_after(sandbox):
+    stub_up_cluster(sandbox, prometheus=True)
+    out = sandbox.tmp_path / "recovered_imports.tf"
+
+    result = sandbox.run(["bash", "scripts/up.sh"], RECOVERED_IMPORTS=str(out))
+
+    assert result.returncode == 0, result.stderr
+    assert sandbox.index_of("state list") < sandbox.index_of("-chdir=infra/runtime apply")

@@ -32,6 +32,8 @@ if gcloud container clusters describe "$CLUSTER" --zone "$ZONE" > /dev/null 2>&1
 fi
 
 terraform -chdir=infra/runtime init -backend-config=backend.hcl -input=false
+# Release the state lock if an earlier run on this computer was cut off.
+./scripts/recover.sh --lock-only
 terraform -chdir=infra/runtime destroy
 
 echo "Checking for anything left billing..."

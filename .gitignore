@@ -24,3 +24,6 @@ target/
 deploy_key*
 .env
 .DS_Store
+
+# Written by scripts/recover.sh after an interrupted make up; removed once applied.
+infra/runtime/recovered_imports.tf

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Creates everything billed by the hour. Managed Kafka alone takes 20 to 30 minutes,
-# so allow about an hour before a demo.
+# so allow about an hour before a demo. If a run is cut off, for example by a lost
+# network connection, run it again: it adopts what the first run created and carries on.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -17,7 +18,11 @@ if [ -z "${TF_VAR_git_ssh_private_key:-}" ] && [ -f "$KEY_FILE" ]; then
 fi
 
 terraform -chdir=infra/runtime init -backend-config=backend.hcl -input=false
+# After an interrupted run, adopt what it left behind instead of failing on it.
+./scripts/recover.sh
 terraform -chdir=infra/runtime apply
+# The import blocks are needed only once; the adopted resources are in the state now.
+rm -f infra/runtime/recovered_imports.tf
 
 CLUSTER=$(terraform -chdir=infra/runtime output -raw cluster_name)
 ZONE=$(terraform -chdir=infra/runtime output -raw cluster_zone)
