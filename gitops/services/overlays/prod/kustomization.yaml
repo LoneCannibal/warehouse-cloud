@@ -7,22 +7,22 @@ resources:
 images:
 - name: warehouse/analytics-api
   newName: asia-south1-docker.pkg.dev/g18-warehouse-3c6b/warehouse/analytics-api
-  newTag: 4e3196a63382994331769864a9be10bcddbf7d27
+  newTag: 654d66d6edd2035ab07848da73147cc734bb7a11
 - name: warehouse/inventory
   newName: asia-south1-docker.pkg.dev/g18-warehouse-3c6b/warehouse/inventory
-  newTag: 4e3196a63382994331769864a9be10bcddbf7d27
+  newTag: 654d66d6edd2035ab07848da73147cc734bb7a11
 - name: warehouse/job-scheduler
   newName: asia-south1-docker.pkg.dev/g18-warehouse-3c6b/warehouse/job-scheduler
-  newTag: 4e3196a63382994331769864a9be10bcddbf7d27
+  newTag: 654d66d6edd2035ab07848da73147cc734bb7a11
 - name: warehouse/order-intake
   newName: asia-south1-docker.pkg.dev/g18-warehouse-3c6b/warehouse/order-intake
-  newTag: 4e3196a63382994331769864a9be10bcddbf7d27
+  newTag: 654d66d6edd2035ab07848da73147cc734bb7a11
 - name: warehouse/packing
   newName: asia-south1-docker.pkg.dev/g18-warehouse-3c6b/warehouse/packing
-  newTag: 4e3196a63382994331769864a9be10bcddbf7d27
+  newTag: 654d66d6edd2035ab07848da73147cc734bb7a11
 - name: warehouse/picking
   newName: asia-south1-docker.pkg.dev/g18-warehouse-3c6b/warehouse/picking
-  newTag: 4e3196a63382994331769864a9be10bcddbf7d27
+  newTag: 654d66d6edd2035ab07848da73147cc734bb7a11
 - name: warehouse/worker-registry
   newName: asia-south1-docker.pkg.dev/g18-warehouse-3c6b/warehouse/worker-registry
-  newTag: 4e3196a63382994331769864a9be10bcddbf7d27
+  newTag: 654d66d6edd2035ab07848da73147cc734bb7a11
