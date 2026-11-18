@@ -6,10 +6,12 @@ Scenario S18: Smart Warehouse (picking, packing and dispatch). Required concept:
 
 | ID number | Name | Tasks | Services |
 |---|---|---|---|
-| 2025H1120145P | Aakash S D | a. Infrastructure as Code, d. GitOps | Order Intake, Inventory |
-| 2025H1120162P | Aman Kumar | c. Kubernetes and HPA, f. ZooKeeper | Job Scheduler, Worker Registry |
-| 2025H1120163P | Pranjal Pandey | e. Flink, h. Observability | Warehouse Analytics, Picking |
-| 2025H1120167P | Bhagavath M S | b. Serverless and communication, g. Storage | Dispatch, Packing |
+| 2025H1120145P | Aakash S D | e. Flink and Kafka, h. Metrics and Logging | Order Intake, Warehouse Analytics |
+| 2025H1120162P | Aman Kumar | f. ZooKeeper, g. Storage | Job Scheduler, Worker Registry |
+| 2025H1120163P | Pranjal Pandey | a. Infrastructure as Code, b. Serverless function and Communication | Inventory, Dispatch |
+| 2025H1120167P | Bhagavath M S | c. Kubernetes, HPA and Load test, d. GitOps Controller | Picking, Packing |
+
+The submitted version of this document is [Group_18_Smart_Warehouse.pdf](Group_18_Smart_Warehouse.pdf). These notes go further on ZooKeeper, Flink, cost and security.
 
 ## 1. System overview
 
@@ -31,7 +33,7 @@ An order passes through the system in seven steps:
 
 ![Cloud deployment architecture](diagrams/deployment-architecture.png)
 
-Everything runs in one Google Cloud project in `asia-south1` (Mumbai), chosen for low latency during the demo and load test. GKE nodes, Dataproc and Cloud SQL have no public addresses. The only public entry point is the load balancer that GKE's Ingress controller creates.
+Everything runs in one Google Cloud project in `asia-south1` (Mumbai), chosen for low latency during the demo and load test. GKE nodes, Dataproc and Cloud SQL have no public addresses. There are two public entry points: the load balancer that GKE's Ingress controller creates for the application, and a second load balancer for Grafana, created from its `LoadBalancer` Service. Both are created by Kubernetes, not Terraform.
 
 | Concern | Google Cloud product | Configuration |
 |---|---|---|
@@ -41,7 +43,7 @@ Everything runs in one Google Cloud project in `asia-south1` (Mumbai), chosen fo
 | Messaging | Managed Service for Apache Kafka, Pub/Sub | 3 vCPU and 3 GiB, the minimum, SASL over TLS; one topic with a push subscription and a dead-letter topic |
 | Serverless | Cloud Run functions | Python 3.12, Direct VPC egress |
 | Storage | Cloud Storage, Cloud SQL, Firestore | See section 8 |
-| Public URL | External Application Load Balancer | Created by GKE's built-in Ingress controller |
+| Public URL | External Application Load Balancer; a second load balancer for Grafana | The first is created by GKE's built-in Ingress controller, the second by Grafana's `LoadBalancer` Service |
 | Observability | Prometheus, Grafana, Cloud Logging | See section 11 |
 
 **Fitting the credit.** The group's credit of about $300 pays for everything, so the compute is capped at 8 vCPUs to keep the hourly cost predictable, although the project's quota is 32. The GKE nodes take 6 and Dataproc takes 2. Managed Kafka, Cloud SQL and Cloud Run run in Google's own projects, so they do not count. Terraform refuses any plan above the cap, node upgrades replace one node at a time rather than adding a surge node, and the HPAs stop at 6 pods. The machines are N2 because the project has no E2 quota in `asia-south1`, and `make preflight` checks the machine family's quota as well as the overall one. Section 14 covers how spending stays inside the credit.

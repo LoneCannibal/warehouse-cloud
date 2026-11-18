@@ -4,30 +4,33 @@ Required concept: ZooKeeper system
 
 Each member has 2 tasks (a-h) and 2 services.
 
-IDNO            NAME             TASKS                                    SERVICES
-2025H1120145P   AAKASH S D       a. Infrastructure as Code                Order Intake Service
-                                 d. GitOps controller                     Inventory Service
+IDNO            NAME             TASKS                                        SERVICES
+2025H1120145P   AAKASH S D       e. Flink and Kafka                           Order Intake Service
+                                 h. Metrics and Logging                       Warehouse Analytics Service
 
-2025H1120162P   AMAN KUMAR       c. Managed Kubernetes, HPA, load test    Job Scheduler
-                                 f. ZooKeeper concept                     Worker Registry
+2025H1120162P   AMAN KUMAR       f. ZooKeeper                                 Job Scheduler
+                                 g. Storage                                   Worker Registry
 
-2025H1120163P   PRANJAL PANDEY   e. Flink stream processing               Warehouse Analytics Service
-                                 h. Observability                         Picking Service
+2025H1120163P   PRANJAL PANDEY   a. Infrastructure as Code                    Inventory Service
+                                 b. Serverless function and Communication     Dispatch Service
 
-2025H1120167P   BHAGAVATH M S    b. Serverless and communication          Dispatch Service
-                                 g. Cloud storage                         Packing Service
+2025H1120167P   BHAGAVATH M S    c. Kubernetes, HPA and Load test             Picking Service
+                                 d. GitOps Controller                         Packing Service
 
 
 Where each member's work lives
 
-AAKASH S D       infra/, gitops/apps, gitops/services, .github/, scripts/up.sh, scripts/down.sh,
-                 scripts/preflight.sh, infra/bootstrap/budget.tf and killswitch/,
-                 services/order-intake, services/inventory
-AMAN KUMAR       gitops/platform/zookeeper, load-tests/, scripts/chaos.sh,
-                 libs/warehouse_common (zk.py, worker.py),
-                 services/job-scheduler, services/worker-registry, tests/integration
-PRANJAL PANDEY   gitops/platform/monitoring, gitops/platform/dashboards, infra/runtime/dataproc.tf,
-                 scripts/gen_dashboards.py, services/analytics-flink, services/analytics-api,
-                 services/picking
-BHAGAVATH M S    proto/, contracts/, infra/runtime (storage.tf, function.tf, sql.tf),
-                 services/dispatch-function, services/packing
+AAKASH S D       services/order-intake, services/analytics-flink, services/analytics-api,
+                 infra/runtime/kafka.tf, infra/runtime/dataproc.tf and dataproc/, contracts/,
+                 libs/warehouse_common (kafka.py, logs.py, metrics.py),
+                 gitops/platform/monitoring, gitops/platform/dashboards,
+                 scripts/gen_dashboards.py, scripts/flink-ui.sh, .github/workflows/flink.yml
+AMAN KUMAR       services/job-scheduler, services/worker-registry,
+                 libs/warehouse_common (zk.py, worker.py), gitops/platform/zookeeper,
+                 infra/runtime (storage.tf, sql.tf), scripts/chaos.sh, tests/integration
+PRANJAL PANDEY   services/inventory, services/dispatch-function, proto/,
+                 infra/bootstrap (including budget.tf and killswitch/),
+                 infra/runtime (network.tf, gke.tf, iam.tf, kubernetes.tf, function.tf),
+                 scripts/up.sh, scripts/down.sh, scripts/recover.sh, scripts/preflight.sh
+BHAGAVATH M S    services/picking, services/packing, gitops/apps, gitops/services,
+                 .github/workflows (test.yml, build.yml), load-tests/

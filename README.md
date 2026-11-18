@@ -1,12 +1,215 @@
 # Smart Warehouse
 
-A cloud-native fulfilment system for picking, packing and dispatch, with ZooKeeper coordinating work across simulated warehouse workers. It runs on Google Cloud. CS/SS G527 Cloud Computing, Group 18.
+A cloud-native fulfilment system for picking, packing and dispatch on Google Cloud, with ZooKeeper coordinating work across simulated warehouse workers. CS/SS G527 Cloud Computing, Group 18, scenario S18, with ZooKeeper as the required concept.
 
-- Design: [docs/design-document.md](docs/design-document.md)
+- Design document, as submitted: [docs/Group_18_Smart_Warehouse.pdf](docs/Group_18_Smart_Warehouse.pdf)
+- Longer design notes, including ZooKeeper, Flink, cost and security: [docs/design-document.md](docs/design-document.md)
 - What has been tested, and what has not: [docs/verification.md](docs/verification.md)
-- Demo script: [docs/demo-runbook.md](docs/demo-runbook.md)
-- Demo guide, page by page in the console and terminal: [docs/demo-guide.md](docs/demo-guide.md)
+- Demo script: [docs/demo-runbook.md](docs/demo-runbook.md), and the page-by-page guide: [docs/demo-guide.md](docs/demo-guide.md)
 - Who owns what: [task_divison.txt](task_divison.txt)
+- How to set it up and run it: [Setup and operations](#setup-and-operations), at the end of this page
+
+## Team and task division
+
+| ID number | Name | Tasks | Services |
+|---|---|---|---|
+| 2025H1120145P | Aakash S D | e. Flink and Kafka<br>h. Metrics and Logging | Order Intake Service<br>Warehouse Analytics Service |
+| 2025H1120162P | Aman Kumar | f. ZooKeeper<br>g. Storage | Job Scheduler<br>Worker Registry |
+| 2025H1120163P | Pranjal Pandey | a. Infrastructure as Code<br>b. Serverless function and Communication | Inventory Service<br>Dispatch Service |
+| 2025H1120167P | Bhagavath M S | c. Kubernetes, HPA and Load test<br>d. GitOps Controller | Picking Service<br>Packing Service |
+
+## 1. System overview
+
+The system runs fulfilment for a warehouse: it accepts orders, reserves stock, splits each order into picking and packing tasks, hands those tasks to workers, and passes finished packages to dispatch. While it runs, it measures throughput, queue depth, and how fast abandoned work is recovered.
+
+The hard problem is not storing orders, but surviving worker failure. A picker can stop partway through a task, and that work must not be lost, done twice, or left waiting forever. ZooKeeper sits at the centre of the design for that reason: it tells the scheduler which workers are alive and who holds which task.
+
+### 1.1 Order lifecycle
+
+1. A client posts the order to **Order Intake**, the public REST service.
+2. **Order Intake** reserves stock from **Inventory** over gRPC, stores the order, and publishes it to Kafka.
+3. The **Job Scheduler** leader consumes the order and creates one `PICK` task per warehouse zone.
+4. The leader offers each task to a live worker through **ZooKeeper**, and that worker takes an ephemeral lease on it.
+5. **Picking** workers plan a route and confirm the pick. When the order's last pick completes, the scheduler creates its `PACK` task.
+6. A **Packing** worker writes a package manifest to Cloud Storage. Cloud Storage notifies Pub/Sub, which pushes the notification to the **Dispatch** function on Cloud Run.
+7. **Dispatch** records the shipment and publishes a dispatch event. Throughout, the **Warehouse Analytics** Flink job aggregates every task event into one-minute windows per zone.
+
+## 2. Cloud deployment architecture
+
+Everything runs in one Google Cloud project in `asia-south1` (Mumbai). GKE nodes, Dataproc, and Cloud SQL have no public addresses, and Kafka and PostgreSQL are reachable only inside the VPC. Two load balancers face the internet: the one GKE's Ingress controller creates for the application, and Grafana's, protected by its admin password.
+
+### 2.1 Architecture overview diagram
+
+Only two load balancers face the internet; the rest is private. Terraform creates the infrastructure inside the project; Argo CD pulls the cluster's contents from GitHub, and CI only pushes images to Artifact Registry.
+
+![Architecture overview diagram](docs/diagrams/deployment-architecture.png)
+
+### 2.2 Cloud component configuration
+
+| Concern | Google Cloud product | Configuration |
+|---|---|---|
+| Microservices | GKE Standard | One zonal cluster, 3 `n2-standard-2` nodes, Workload Identity |
+| Coordination | ZooKeeper on GKE | 3-node ensemble, persistent disks, one pod per node |
+| Stream processing | Dataproc | Image 2.2 with the Flink component, one `n2-highmem-2` node |
+| Messaging | Managed Service for Apache Kafka | 3 vCPU, 3 GiB, SASL over TLS with Google sign-in, 3 topics |
+| Event trigger | Pub/Sub | Cloud Storage notification topic, push subscription, dead-letter topic |
+| Serverless | Cloud Run functions | Python 3.12 Dispatch function, Direct VPC egress |
+| Relational data | Cloud SQL for PostgreSQL 16 | Enterprise edition, `db-g1-small`, private IP, one schema per service |
+| Document data | Firestore | Native mode database `warehouse` |
+| Objects | Cloud Storage | Data bucket (manifests, labels), Flink checkpoints, Terraform state, build artifacts |
+| Images | Artifact Registry | One Docker repository, written only by CI |
+| Public entry | External Application Load Balancer, and a second load balancer for Grafana | The first is created by GKE's built-in Ingress controller, the second by Grafana's `LoadBalancer` Service |
+| Observability | Prometheus, Grafana, Cloud Logging | `kube-prometheus-stack` on GKE; logs from GKE, Dataproc, and Cloud Run |
+| Deployment | Terraform, Argo CD, GitHub Actions | Two Terraform stacks; GitOps for everything on the cluster |
+
+## 3. Microservices architecture
+
+The diagram shows the eight services, the data each one owns, and the four ways they communicate, each drawn in its own colour: REST over HTTP (blue), gRPC (red), Kafka (green), and ZooKeeper coordination (purple, dashed). A Cloud Storage upload triggers a Pub/Sub notification, drawn dash-dotted in orange.
+
+![Microservices, their data stores, and how they communicate](docs/diagrams/microservices.png)
+
+### 3.1 Following one order through the diagram
+
+1. **REST at the edge.** Clients reach the system only through the external Application Load Balancer created by the GKE Ingress, which routes by path to Order Intake, Inventory, Worker Registry, and the Analytics API. Every other service has no public route.
+2. **gRPC where the caller needs the answer.** Order Intake calls Inventory's `ReserveStock` and waits for the reply before accepting the order. Each gRPC call is a single request and reply on the same connection, so each arrow points from the caller to the service and the reply travels back along it. The other gRPC calls work the same way: the scheduler leader asks the Worker Registry for available workers (`ListAvailable`), workers fetch and complete tasks on the Job Scheduler (`GetTask`, `CompleteTask`), and Picking confirms picked stock with Inventory (`ConfirmPick`).
+3. **Kafka for everything that can happen later.** An accepted order is published to `warehouse.orders` as `ORDER_ACCEPTED`. The Job Scheduler consumes it and creates one pick task per zone. Every task lifecycle event goes to `warehouse.task-events`, written through a transactional outbox so that no event is lost if a pod crashes.
+4. **ZooKeeper for coordination only.** ZooKeeper elects one Job Scheduler leader out of three replicas. Each worker registers itself in ZooKeeper with an ephemeral node, which disappears when its pod dies, and the leader assigns tasks by writing offers under each worker's path in ZooKeeper. No task data passes through ZooKeeper: workers fetch task details over gRPC.
+5. **Serverless dispatch through storage events.** Packing uploads each manifest to Cloud Storage. The upload triggers a Pub/Sub push to the Dispatch Cloud Run function, which writes the shipping label, records the shipment in Firestore, and publishes `SHIPMENT_DISPATCHED`. Pub/Sub retries a failed delivery with backoff and moves the message to a dead-letter topic after five failures. Packing never calls Dispatch directly, so a slow or failing Dispatch never blocks a packer.
+6. **Stream analytics.** The Flink job on Dataproc consumes every task event, computes one-minute windows per zone, and publishes them to `warehouse.analytics.results`. The Analytics API stores the windows in Firestore (`analytics_zones`) and serves them to the console.
+
+## 4. Microservice responsibilities
+
+Eight services each own one part of the flow and their own data; no service reads another's tables.
+
+| Service | Responsibility | Runs on | Data it owns | Scaling |
+|---|---|---|---|---|
+| Order Intake | Public API. Validates orders, reserves stock, publishes accepted orders. Serves the web front end: shop, order tracking, and warehouse view. | GKE | Cloud SQL `orders` schema | HPA, CPU 60%, 2 to 6 pods |
+| Inventory | Tracks stock. Reserves and releases it atomically, and confirms each pick once only. | GKE | Cloud SQL `inventory` schema | 2 replicas |
+| Job Scheduler | Creates tasks, assigns them to workers, manages leases, reclaims abandoned work, relays the event outbox. | GKE | Cloud SQL `scheduler` schema | 3 replicas, one elected leader; no HPA because assignment is single-writer |
+| Worker Registry | Tracks which workers are live, their capability, zones, and slots. | GKE | Firestore `workers`, Cloud SQL `workers` schema | 2 replicas |
+| Picking | Runs `PICK` tasks: plans a route through the bins, confirms the pick with Inventory. | GKE | None | HPA, CPU 60%, 2 to 6 pods; each pod is one worker station |
+| Packing | Runs `PACK` tasks: chooses a box, writes the package manifest. | GKE | Cloud Storage `manifests/` | 2 replicas; each pod is one worker station |
+| Dispatch | Records the shipment, writes the label, publishes the dispatch event. | Cloud Run function | Firestore `shipments`, Cloud Storage `labels/` | Scales with the event rate, to zero when idle |
+| Warehouse Analytics | Flink job computes per-zone, one-minute windows; an API stores and serves them. | Flink on Dataproc, API on GKE | Firestore `analytics_zones` | One Flink job; API 2 replicas |
+
+Warehouse Analytics has two deployable parts because a Flink job cannot answer queries. Each Picking or Packing pod is one simulated worker station, so scaling the Deployment adds warehouse capacity: a new pod joins ZooKeeper and receives work with no change to the scheduler.
+
+## 5. Interconnection mechanisms
+
+Five mechanisms connect the services, each chosen for what that particular call needs: a synchronous answer, a durable stream, an event trigger, or coordination.
+
+| Mechanism | Used between | Why this mechanism |
+|---|---|---|
+| REST | Clients and the web front end to Order Intake; Order Intake to Job Scheduler for order and floor views; Analytics and Worker Registry read APIs | Universal for public APIs, easy to inspect, callable straight from a browser |
+| gRPC | Order Intake and Picking to Inventory (`ReserveStock`, `ConfirmPick`); Job Scheduler to Worker Registry (`ListAvailable`); workers to Job Scheduler (`GetTask`, `CompleteTask`) | Typed contract and low latency, for calls whose answer the caller needs before it continues |
+| Kafka | Order Intake to Job Scheduler; scheduler, workers, and Dispatch to Flink; Flink to the Analytics API | Durable, replayable, many consumers; absorbs a burst of orders without slowing intake |
+| Cloud Storage + Pub/Sub push | Packing to Dispatch | Turns a file upload into a retried event, with a dead-letter topic for one that keeps failing |
+| ZooKeeper | Job Scheduler, Picking and Packing workers, Worker Registry | Coordination, not data: leader election, live membership, task offers, and leases |
+
+### 5.1 Kafka topics
+
+Three topics carry every asynchronous event; contracts for each live in `contracts/`.
+
+| Topic | Partitions | Producers | Consumers |
+|---|---|---|---|
+| `warehouse.orders` | 6 | Order Intake | Job Scheduler leader |
+| `warehouse.task-events` | 6 | Job Scheduler (via its outbox), Picking and Packing, Dispatch | Flink job; Job Scheduler (marks orders dispatched) |
+| `warehouse.analytics.results` | 3 | Flink job | Analytics API |
+
+### 5.2 Reliability details
+
+- **gRPC behind an autoscaler:** gRPC holds one long-lived connection, so a normal Kubernetes Service would pin each client to one pod and new HPA replicas would receive nothing. Headless Services, client-side `round_robin` balancing, and a 30-second `max_connection_age` make clients rediscover pods. Clients retry on `UNAVAILABLE`, which is safe because every RPC is idempotent or fenced: `ReserveStock` is keyed by order, `ConfirmPick` by task, and `CompleteTask` by attempt.
+- **No lost events:** A service that writes its database and then publishes to Kafka can crash between the two. The Job Scheduler writes each event into an outbox table in the same transaction as the state change, and the leader relays the outbox to Kafka afterwards. Delivery is at least once, so every consumer is idempotent.
+
+## 6. Design decisions and rationale
+
+Each decision below names the alternative we considered and why we did not choose it.
+
+**1. Why is Dispatch the serverless service?**
+Dispatch runs once per packed order and does a short, self-contained job: it writes a shipping label, records the shipment, and publishes one event. It keeps no state between orders and has no part in coordination. As a Cloud Run function triggered by Pub/Sub, it uses no resources while idle and scales with bursts, and Pub/Sub gives it retries and a dead-letter topic with no code of ours. The other services need to stay running:
+
+- Picking, Packing, and the Job Scheduler hold ZooKeeper sessions, which a serverless instance would lose whenever it was paused or removed.
+- The Job Scheduler and the Analytics API run continuously as Kafka consumers.
+- Order Intake and Inventory sit on every order's request path, where cold starts would add latency.
+
+**2. Why do most services run two replicas?**
+This provides redundancy to the system so there is no single point of failure for any service. If one pod crashes, the load balancer and gRPC clients use the other while Kubernetes starts a replacement. It also allows updates without downtime, because a rollout starts a new pod before stopping an old one.
+
+**3. Why does the Job Scheduler run three replicas instead of two?**
+Only the leader, elected through ZooKeeper, assigns tasks, so extra replicas add no throughput. They exist for failover. With two replicas, losing the leader leaves a single replica with no standby. With three, a failover still leaves one leader and one standby, and a PodDisruptionBudget of `minAvailable: 2` keeps that standby during node maintenance.
+
+**4. Why do only Order Intake and Picking autoscale?**
+They are the two services whose work grows directly with order volume. Each runs a Horizontal Pod Autoscaler (HPA) at 60% CPU, between 2 and 6 pods. Order Intake receives every request from the internet. Picking is the fulfilment bottleneck: an order creates up to three pick tasks, one per zone, but only one pack task. In the live load test at 35 orders per second, Picking scaled from 2 to 6 pods, and Order Intake from 2 to 4, within two minutes. The others stay fixed:
+
+- The Job Scheduler has a single writer, so more replicas add no throughput.
+- ZooKeeper slows down as members are added.
+- Inventory's work is a short database transaction, so it is limited by Cloud SQL, not by its pods.
+- The remaining services see a fraction of the load.
+
+**5. Why is gRPC used between services instead of REST?**
+gRPC is used wherever the caller cannot continue without the answer:
+
+| Call | Caller → service | The reply decides |
+|---|---|---|
+| `ReserveStock`, `ReleaseStock` | Order Intake → Inventory | Whether the order is accepted, and each line's bin |
+| `ConfirmPick` | Picking → Inventory | That picked units have left the shelf |
+| `ListAvailable` | Job Scheduler → Worker Registry | Which live workers have free slots |
+| `GetTask`, `CompleteTask` | Picking, Packing → Job Scheduler | The task's details, and whether a result is accepted |
+
+Each call is one request and one reply. Calls run over persistent HTTP/2 connections, which keeps latency low, and every call has a deadline. REST stays at the public edge, because browsers and load-testing tools speak plain HTTP and JSON.
+
+**6. Why are message queues used, and where?**
+A queue is used wherever the sender should not wait for the receiver, or the receiver may be temporarily unavailable:
+
+| Queue | Producer → consumer | Carries |
+|---|---|---|
+| Kafka `warehouse.orders` | Order Intake → Job Scheduler | Accepted orders |
+| Kafka `warehouse.task-events` | Job Scheduler, Dispatch → Flink | Task events and dispatches |
+| Kafka `warehouse.analytics.results` | Flink → Analytics API | Per-zone, per-minute results |
+| Pub/Sub `warehouse-manifests` | Cloud Storage → Dispatch | One notification per new manifest |
+
+An order is accepted as soon as its stock is reserved, even while the scheduler is changing leaders: the order waits in Kafka until a leader takes it. A burst of orders becomes a backlog instead of failed requests. Pub/Sub is used for Dispatch because Cloud Storage can notify it directly, and a push subscription can call a serverless function with no consumer process running.
+
+**7. Why Kafka?**
+Kafka keeps messages in a retained log, and each consumer tracks its own position in it. A newly elected scheduler leader resumes from the last committed position, so no order is skipped. Flink saves its position in every checkpoint, so after a restart it replays exactly the events it had not yet counted. Messages with the same key keep their order, so an order's events are processed in sequence. The managed service runs the brokers outside our cluster and uses Google sign-in instead of stored passwords.
+
+**8. Why do only some services have a public endpoint?**
+The load balancer exposes only what a customer or the web console needs, and the only write it accepts is placing an order:
+
+- Order Intake: `/`, `/v1/orders`, and `/v1/floor`, for the console page, ordering, tracking, and the floor map.
+- Inventory, the Worker Registry, and the Analytics API: `/v1/stock`, `/v1/workers`, and `/v1/analytics`, all read-only.
+
+Everything that changes or coordinates the warehouse stays inside the cluster: the Job Scheduler, Picking, Packing, and ZooKeeper. The scheduler's views are forwarded through Order Intake rather than exposed directly. Every service's `/health`, `/metrics`, `/docs`, and `/chaos` routes stay private.
+
+**9. Why is Cloud SQL used, and where?**
+One PostgreSQL instance holds a schema per service: `inventory` (stock and reservations), `orders` (accepted orders), `scheduler` (orders, tasks, the outbox, and the leader epoch; the leases themselves live in ZooKeeper), and `workers` (worker profiles). This data needs what a relational database guarantees:
+
+- Row locks, so two orders cannot reserve the last unit of stock.
+- Unique keys, so a retried order is not created twice.
+- Transactions across tables, so a task update and its outgoing event commit together, and a result is accepted only if its attempt number and the leader's epoch are current.
+
+One shared instance keeps each service's data separate at a fraction of the cost of one instance per service.
+
+**10. Why is Cloud Storage used, and where?**
+Cloud Storage holds files that are written once and read whole:
+
+- Packing's manifests and Dispatch's labels.
+- Flink's checkpoints.
+- The Flink JAR and the function's code.
+- Terraform's state.
+
+Storing files in the database would bloat it. More importantly, a new manifest triggers a Pub/Sub notification on its own, which makes the hand-off from Packing to Dispatch event-driven with no extra service.
+
+**11. Why is Firestore used for analytics?**
+Each Flink result is one small document per zone per minute, stored under `analytics_zones`. It is written by key, so a window that Flink re-sends after a restart simply overwrites itself. The console reads "the latest 30 windows for a zone" as one ordered query every 15 seconds. Firestore needs no server to size, costs almost nothing at this volume, and survives `make down`, so history is kept between demos. The alternatives fit worse:
+
+- Cloud SQL would put analytics writes on the transactional database.
+- BigQuery is built for large scans, not frequent small reads.
+- Bigtable's minimum cost is far above this workload.
+
+# Setup and operations
+
+Everything below is for running the project: where the code lives, keeping inside the credit, running it locally, and deploying it to Google Cloud.
 
 ## Repository layout
 
