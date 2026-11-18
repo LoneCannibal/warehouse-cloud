@@ -2,7 +2,7 @@ PYTHON  ?= python3
 REGION  ?= asia-south1
 PY_SERVICES := libs/warehouse_common services/order-intake services/inventory services/picking services/packing services/analytics-api services/dispatch-function
 
-.PHONY: help install console proto dashboards diagrams design-pdf test test-unit test-integration test-flink test-terraform test-manifests \
+.PHONY: help install console proto dashboards test test-unit test-integration test-flink test-terraform test-manifests \
         local-up local-down smoke load bootstrap backend killswitch-check flink-jar preflight up down grafana
 
 help:
@@ -35,12 +35,6 @@ proto:
 
 dashboards:
 	$(PYTHON) scripts/gen_dashboards.py
-
-diagrams:
-	$(PYTHON) scripts/gen_diagrams.py
-
-design-pdf: diagrams
-	$(PYTHON) scripts/build_design_pdf.py
 
 test: test-unit test-flink test-terraform test-manifests test-integration
 

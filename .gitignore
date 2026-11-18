@@ -27,3 +27,14 @@ deploy_key*
 
 # Written by scripts/recover.sh after an interrupted make up; removed once applied.
 infra/runtime/recovered_imports.tf
+
+# Documentation and the scripts that draw diagrams. The repository holds only what the
+# system needs to build, deploy and run, plus the two architecture diagrams the README
+# shows. A file under an ignored folder cannot be re-included, hence docs/* not docs/.
+docs/*
+!docs/diagrams/
+docs/diagrams/*
+!docs/diagrams/microservices.png
+!docs/diagrams/deployment-architecture.png
+scripts/gen_diagrams.py
+scripts/build_design_pdf.py

@@ -1,6 +1,7 @@
 """The ZooKeeper behaviour the demo relies on, run against a real ensemble.
 
-Each test maps to a row of the failure table in docs/design-document.md.
+The tests cover leader election and failover, dead and hung workers, fencing of stale
+results, how work is assigned, and the event outbox.
 """
 from __future__ import annotations
 

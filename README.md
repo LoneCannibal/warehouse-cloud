@@ -2,10 +2,6 @@
 
 A cloud-native fulfilment system for picking, packing and dispatch on Google Cloud, with ZooKeeper coordinating work across simulated warehouse workers. CS/SS G527 Cloud Computing, Group 18, scenario S18, with ZooKeeper as the required concept.
 
-- Design document, as submitted: [docs/Group_18_Smart_Warehouse.pdf](docs/Group_18_Smart_Warehouse.pdf)
-- Longer design notes, including ZooKeeper, Flink, cost and security: [docs/design-document.md](docs/design-document.md)
-- What has been tested, and what has not: [docs/verification.md](docs/verification.md)
-- Demo script: [docs/demo-runbook.md](docs/demo-runbook.md), and the page-by-page guide: [docs/demo-guide.md](docs/demo-guide.md)
 - Who owns what: [task_divison.txt](task_divison.txt)
 - How to set it up and run it: [Setup and operations](#setup-and-operations), at the end of this page
 
