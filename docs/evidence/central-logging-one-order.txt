@@ -1,8 +1,0 @@
-Cloud Logging query: jsonPayload.order_id="ord-073d4f9c4be64172" across GKE containers and the Dispatch function
-4 entries, from 2 resource types
-18:29:30.987 k8s_container       order-intake       INFO | order accepted | 
-18:29:31.215 k8s_container       job-scheduler      INFO | tasks created | 
-18:29:34.704 cloud_run_revision  warehouse-dispatch INFO | dispatch published | 
-18:29:34.706 k8s_container       job-scheduler      INFO | order dispatched | 
-2026-11-05T18:56:07.630536428Z	jobmanager.log	2026-11-05 18:56:07,475 INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Completed checkpoint 46 for job 94e1b2c1b0e2cdff5a75c87eb6
-2026-11-05T18:55:37.630476092Z	jobmanager.log	2026-11-05 18:55:37,509 INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Completed checkpoint 45 for job 94e1b2c1b0e2cdff5a75c87eb6

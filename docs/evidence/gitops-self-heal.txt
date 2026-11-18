@@ -1,5 +1,0 @@
-18:54:18 manual change outside Git: scale inventory to 5 replicas
-deployment.apps/inventory scaled
-18:54:23 inventory spec.replicas=5
-18:54:30 inventory spec.replicas=2
-Argo CD put it back to the 2 replicas in Git

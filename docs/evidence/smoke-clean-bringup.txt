@@ -1,4 +1,0 @@
-accepted ord-24b99373524a4ddd
-status PACKED
-status DISPATCHED
-PASS: ord-24b99373524a4ddd dispatched
