@@ -192,6 +192,7 @@ def floor() -> dict:
 @app.get("/v1/orders/{order_id}")
 def read_order(order_id: str) -> dict:
     with state["pool"].connection() as conn:
+        log.info("TEST 1")
         order = conn.execute(
             "SELECT order_id, customer, priority, lines, created_at FROM orders.orders WHERE order_id = %s",
             (order_id,),
@@ -202,6 +203,7 @@ def read_order(order_id: str) -> dict:
     # Fulfilment state lives in the Job Scheduler. If it is unreachable the order
     # itself is still readable, so this degrades instead of failing.
     try:
+        log.warning("HELLO", extra={"order_id": order_id})
         reply = state["scheduler"].get(f"/v1/orders/{order_id}/tasks")
         if reply.status_code == 404:
             # The event is still in Kafka, so the scheduler has not seen this order yet.
@@ -210,6 +212,8 @@ def read_order(order_id: str) -> dict:
         reply.raise_for_status()
         order["fulfilment"] = reply.json()
     except httpx.HTTPError:
-        log.warning("scheduler unavailable", extra={"order_id": order_id})
         order["fulfilment"] = None
     return order
+
+
+
